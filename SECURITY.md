@@ -2,7 +2,7 @@
 
 ## Supported version
 
-Security fixes target the current `master` branch and the live server.
+Security fixes target the current `main` branch and the live server.
 
 ## Reporting a vulnerability
 
@@ -16,3 +16,4 @@ Include reproduction steps, impact, and any suggested mitigation. You should rec
 - Persistent identity comes from a verified SSH public-key fingerprint.
 - Host keys, SQLite databases, Discord webhooks, gallery admin tokens, and model API keys are ignored and must be supplied outside Git.
 - Discord delivery is optional and best-effort. Never include credentials, key material, or raw fingerprints in event fields.
+- Discord receives only the vital-event allowlist. Local analytics may contain connection metadata and must not be exposed as an unfiltered public API.

@@ -2,11 +2,19 @@
 //
 // Terminals send only key-DOWN bytes (auto-repeating while held), so held
 // directions use a short expiry window kept alive by auto-repeat:
-//   Arrows  ← →  move,  ↑ jump (edge),  ↓ crouch (held)
-//   W punch (edge),  E kick (edge)
+//   Each action is resolved through the player's key map. Defaults are arrows
+//   for movement, W for punch, E for kick, and Space as a second jump key.
 //   BLOCK is not a key: hold the direction AWAY from your opponent (the engine
 //   derives it from movement vs. facing), exactly like the arcade games.
 import { emptyInputs, type Inputs } from '../game/types.js';
+import {
+  DEFAULT_KEY_BINDINGS,
+  bindingFromArrowCode,
+  bindingFromChar,
+  type BindableAction,
+  type BindingToken,
+  type KeyBindings,
+} from './bindings.js';
 
 const HOLD_MS = 240;
 const MOTION_MS = 720; // how long a direction stays in the special-move buffer
@@ -22,6 +30,8 @@ export class InputState {
   private carry = ''; // bytes left over when a chunk split mid escape-sequence
   quit = false;
 
+  constructor(private readonly bindings: KeyBindings = DEFAULT_KEY_BINDINGS) {}
+
   private pushMotion(d: string, now: number): void {
     while (this.motion.length && now - this.motion[0]!.t > MOTION_MS) this.motion.shift();
     if (this.motion.length && this.motion[this.motion.length - 1]!.d === d) { this.motion[this.motion.length - 1]!.t = now; return; }
@@ -29,11 +39,20 @@ export class InputState {
     if (this.motion.length > 8) this.motion.shift();
   }
 
-  private arrow(d: string | undefined, now: number): void {
-    if (d === 'D') { this.leftUntil = now + HOLD_MS; this.pushMotion('L', now); }
-    else if (d === 'C') { this.rightUntil = now + HOLD_MS; this.pushMotion('R', now); }
-    else if (d === 'A') { this.jumpEdge = true; this.pushMotion('U', now); }
-    else if (d === 'B') { this.downUntil = now + HOLD_MS; this.pushMotion('D', now); }
+  private actionFor(token: BindingToken): BindableAction | null {
+    for (const action of Object.keys(this.bindings) as BindableAction[]) {
+      if (this.bindings[action] === token) return action;
+    }
+    return null;
+  }
+
+  private apply(action: BindableAction | null, now: number): void {
+    if (action === 'left') { this.leftUntil = now + HOLD_MS; this.pushMotion('L', now); }
+    else if (action === 'right') { this.rightUntil = now + HOLD_MS; this.pushMotion('R', now); }
+    else if (action === 'jump' || action === 'jumpAlt') { this.jumpEdge = true; this.pushMotion('U', now); }
+    else if (action === 'crouch') { this.downUntil = now + HOLD_MS; this.pushMotion('D', now); }
+    else if (action === 'punch') this.punchEdge = true;
+    else if (action === 'kick') this.kickEdge = true;
   }
 
   feed(data: Buffer): void {
@@ -47,15 +66,19 @@ export class InputState {
         // Need the full 3-byte CSI sequence (ESC [ X). If it's split across
         // chunks, stash the tail and finish it when the next chunk arrives.
         if (i + 2 >= s.length) { this.carry = s.slice(i); break; }
-        if (s[i + 1] === '[' || s[i + 1] === 'O') { this.arrow(s[i + 2], now); i += 3; continue; }
+        if (s[i + 1] === '[' || s[i + 1] === 'O') {
+          const token = bindingFromArrowCode(s[i + 2]);
+          if (token) this.apply(this.actionFor(token), now);
+          i += 3;
+          continue;
+        }
         i += 1; // lone ESC / unknown — skip it
         continue;
       }
-      switch (c.toLowerCase()) {
-        case 'w': this.punchEdge = true; break;
-        case 'e': this.kickEdge = true; break;
-        case ' ': this.jumpEdge = true; break;
-        case 'q': case '\x03': this.quit = true; break;
+      if (c.toLowerCase() === 'q' || c === '\x03') this.quit = true;
+      else {
+        const token = bindingFromChar(c);
+        if (token) this.apply(this.actionFor(token), now);
       }
       i++;
     }

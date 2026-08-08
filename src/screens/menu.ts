@@ -6,7 +6,7 @@ import { THEME } from '../ui/theme.js';
 import { characterAt, ROSTER } from '../game/roster.js';
 import * as db from '../db/db.js';
 
-const ITEMS = ['QUICK MATCH  (PLAY ONLINE)', 'FIGHT LOUNGE  (CHAT + CHALLENGE)', 'PRACTICE MODE', 'LEADERBOARD', 'HELP', 'QUIT'];
+const ITEMS = ['QUICK MATCH  (PLAY ONLINE)', 'FIGHT LOUNGE  (CHAT + CHALLENGE)', 'PRACTICE MODE', 'LEADERBOARD', 'CONTROLS', 'HELP', 'QUIT'];
 
 export const menu = {
   render(s: Session, f: Frame): void {
@@ -14,12 +14,12 @@ export const menu = {
     bigCenter(f, 1, 'STREET FIGHTER', THEME.accent, THEME.bgTop, 1);
     f.center(8, `WELCOME, ${s.displayName}`, THEME.text, THEME.bgTop, true);
 
-    const inner = box(f, Math.floor(f.cols / 2 - 34), 11, 38, 15, { title: 'MAIN MENU', style: 'double' });
+    const inner = box(f, Math.floor(f.cols / 2 - 34), 11, 38, 17, { title: 'MAIN MENU', style: 'double' });
     menuWidget(f, inner.x, inner.y + 1, inner.w, ITEMS, s.menuIndex);
 
     // char + stats panel on the right
     const rx = Math.floor(f.cols / 2 + 6);
-    const rp = box(f, rx, 11, 24, 15, { title: 'YOUR FIGHTER' });
+    const rp = box(f, rx, 11, 24, 17, { title: 'YOUR FIGHTER' });
     const c = characterAt(s.cursor);
     f.write(rp.x, rp.y + 1, c.name, THEME.accent, THEME.panel, true);
     f.write(rp.x, rp.y + 2, c.tagline.toUpperCase(), THEME.textDim, THEME.panel);
@@ -50,8 +50,9 @@ export const menu = {
         case 1: s.enterLounge(); break;
         case 2: s.selectMode = 'practice'; s.goTo('select'); break;
         case 3: s.goTo('leaderboard'); break;
-        case 4: s.helpOpen = true; s.prevFrame = null; break;
-        case 5: s.close(); break;
+        case 4: s.goTo('controls'); break;
+        case 5: s.helpOpen = true; s.prevFrame = null; break;
+        case 6: s.close(); break;
       }
     }
   },

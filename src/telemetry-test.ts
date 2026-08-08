@@ -16,8 +16,13 @@ const address = server.address();
 if (!address || typeof address === 'string') throw new Error('test server did not bind');
 process.env.SF_DISCORD_WEBHOOK = `http://127.0.0.1:${address.port}/api/webhooks/test`;
 
-const { actorRef, flushTelemetry, track } = await import('./telemetry/discord.js');
+const { actorRef, flushTelemetry, setAnalyticsSink, track } = await import('./telemetry/discord.js');
+const localEvents: string[] = [];
+setAnalyticsSink((event) => localEvents.push(event));
 track('ssh_connected', { player: 'ALPHA', ip: '127.0.0.1' });
+track('special_move_used', { player: 'ALPHA', move: 'HADOUKEN' });
+track('terminal_resized', { cols: 120, rows: 40 });
+track('quick_match_queued', { player: 'ALPHA' });
 track('match_won', { winner: 'ALPHA', loser: 'BRAVO', rating_delta: 16 });
 const flushed = await flushTelemetry(5000);
 await new Promise<void>((resolve) => server.close(() => resolve()));
@@ -25,7 +30,9 @@ await new Promise<void>((resolve) => server.close(() => resolve()));
 const payloads = received as Array<{ embeds?: Array<{ title?: string; fields?: Array<{ name: string; value: string }> }> }>;
 const checks = {
   flushed,
-  delivered_both: payloads.length === 2,
+  local_ledger_receives_every_event: localEvents.length === 5,
+  discord_receives_only_vital_events: payloads.length === 2,
+  noisy_events_stay_off_discord: !payloads.some((p) => ['SSH CONNECTED', 'SPECIAL MOVE USED', 'TERMINAL RESIZED'].includes(p.embeds?.[0]?.title ?? '')),
   event_title: payloads[1]?.embeds?.[0]?.title === 'MATCH WON',
   fields_preserved: payloads[1]?.embeds?.[0]?.fields?.some((f) => f.name === 'winner' && f.value === 'ALPHA') === true,
   verified_identity_hashed: /^key:[a-f0-9]{12}$/.test(actorRef('SHA256:private-fingerprint', 'fallback')),
@@ -35,4 +42,3 @@ for (const [name, ok] of Object.entries(checks)) console.log(`${ok ? 'PASS' : 'F
 const ok = Object.values(checks).every(Boolean);
 console.log(ok ? 'TELEMETRY TEST: PASS' : 'TELEMETRY TEST: FAIL');
 process.exit(ok ? 0 : 1);
-

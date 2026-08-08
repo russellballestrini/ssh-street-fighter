@@ -35,6 +35,8 @@ Keep commits focused. Explain what changed, how you tested it, and whether a vis
 - A new move must have its required pose assets, help text, mechanics coverage, and asset-contract coverage.
 - Generated sprites need a transparent background, consistent proportions, a stable ground line, and continuity with that fighter's anchor image.
 - SQLite changes are additive. Existing player, match, and chat data must survive upgrades.
+- New instrumentation belongs in the local analytics ledger first. Discord is restricted to the documented vital-event allowlist.
+- Public analytics must aggregate player activity and must never expose IP addresses, connection IDs, or raw event rows.
 - Webhooks and API keys never belong in source, fixtures, screenshots, or logs.
 
 ## Adding a fighter or move
@@ -46,6 +48,10 @@ Keep commits focused. Explain what changed, how you tested it, and whether a vis
 5. Render the selection screen, the help card, and every new attack before opening the PR.
 
 The packed JSON files are the runtime source of truth. `assets/sprites/<NAME>/raw/idle_1.png` is the checked-in identity anchor; other raw generation intermediates stay ignored.
+
+## Adding analytics or a profile view
+
+Read [docs/ANALYTICS.md](docs/ANALYTICS.md) first. Prefer engine definitions for authoritative move damage/frame data and aggregated event queries for observed usage. Do not copy balance numbers into a second hand-maintained table, and do not publish raw telemetry fields.
 
 ## Reporting bugs
 

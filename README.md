@@ -30,6 +30,7 @@ SSH Street Fighter is a full two-player fighting game rendered with 24-bit ANSI 
 - **Real motion inputs** with a packet-safe input buffer for split SSH escape sequences
 - **Best-of-three online fights**, solo practice, direct challenges, and a quick-match queue
 - **Persistent ELO ratings**, records, leaderboard, handles, and lounge chat
+- **Per-player controls**, configurable in-game and remembered with your SSH identity
 - **Zoom-proof adaptive HUD** using crisp terminal glyphs over the renderer-native world
 - **Truecolor by default**, compressed and diff-streamed without flattening the palette
 - **A live sprite gallery** for inspecting every animation pose
@@ -69,6 +70,8 @@ Your public-key fingerprint becomes your identity. Connect with a key to keep yo
 | Character move card | `?` during a fight |
 | Leave a match | `Q` |
 | Menus | `W` / `S`, arrows, Enter |
+
+Choose **Controls** on the main menu to rebind every combat direction, both jump slots, punch, and kick. Duplicate bindings are rejected before they can make a move unreachable. Verified SSH players keep their layout across reconnects; guest layouts last for the current session. `Q`, `V`, and `?` remain fixed so leaving a fight, changing graphics mode, and opening the move card are always recoverable.
 
 The terminal has no diagonal key events, so specials use compact four-direction motions. Inputs are relative to the direction your fighter is facing.
 
@@ -115,7 +118,9 @@ The server listens on `0.0.0.0:2223` by default. Configuration is entirely envir
 | `SF_DB` | `data/streetfighter.db` | SQLite database path |
 | `SF_COLOR_STEP` | `1` | Explicit RGB quantization step; `1` is full truecolor |
 | `SF_COLOR_MODE` | unset | Set to `256` only for an intentionally indexed-color server |
-| `SF_DISCORD_WEBHOOK` | unset | Optional best-effort event telemetry destination |
+| `SF_DISCORD_WEBHOOK` | unset | Optional best-effort Discord destination for vital community events only |
+
+All events are recorded locally in the append-only `analytics_events` SQLite table for the planned analytics site. Discord receives only quick-match waiting, match start/result, forfeit, and lounge chat events. Inputs, special moves, screen views, connections, and terminal resolution changes never go to Discord. See [the analytics contract](docs/ANALYTICS.md).
 
 Copy [`.env.example`](.env.example) as a starting point. Never commit a webhook, host key, database, or gallery admin token.
 
@@ -164,8 +169,8 @@ src/
   render/     RGB pixel grids, terminal-cell conversion, exact ANSI diffs
   screens/    menu, select, lounge, fight HUD, help, results, leaderboard
   net/        SSH authentication, sessions, matchmaking, challenges
-  db/         additive SQLite schema, players, ELO, match/chat history
-  telemetry/  optional non-blocking event delivery
+  db/         additive SQLite schema, players, controls, ELO, match/chat/event history
+  telemetry/  local analytics plus vital-only non-blocking Discord delivery
 assets/
   sprites/    packed RGBA pose JSON plus one generation anchor per fighter
   stages/     six packed arena backgrounds
@@ -175,6 +180,8 @@ web/          Next.js sprite gallery and guarded regeneration UI
 ## Contributing
 
 Bug fixes, renderer work, accessibility improvements, terminal compatibility reports, fighter balance, sprites, and new arenas are welcome. Start with [CONTRIBUTING.md](CONTRIBUTING.md), and please follow the [community guidelines](CODE_OF_CONDUCT.md).
+
+The public [roadmap](ROADMAP.md) tracks the analytics/profile website, additional fighters, and other contribution-sized milestones.
 
 ## License and naming
 

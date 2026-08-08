@@ -3,13 +3,14 @@ import { readFileSync } from 'fs';
 import type { Duplex } from 'stream';
 import { Session } from './session.js';
 import { fingerprintOf, verifyPubkey } from './identity.js';
-import { initDb } from '../db/db.js';
-import { eventId, track } from '../telemetry/discord.js';
+import { addAnalyticsEvent, initDb } from '../db/db.js';
+import { eventId, setAnalyticsSink, track } from '../telemetry/discord.js';
 
 const { Server } = ssh2;
 
 export function startServer(port: number, host: string, hostKeyPath: string) {
   initDb();
+  setAnalyticsSink(addAnalyticsEvent);
   const hostKey = readFileSync(hostKeyPath);
 
   const server = new Server(

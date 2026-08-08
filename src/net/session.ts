@@ -3,6 +3,15 @@ import { HIDE_CURSOR, SHOW_CURSOR, CLEAR_SCREEN, RESET } from '../render/pixel.j
 import { Frame, diffCells, type RenderMode, type Cell } from '../render/frame.js';
 import { parseKeys, type Key } from '../ui/key.js';
 import { InputState } from '../input/keys.js';
+import {
+  DEFAULT_KEY_BINDINGS,
+  parseKeyBindings,
+  serializeKeyBindings,
+  withBinding,
+  type BindableAction,
+  type BindingToken,
+  type KeyBindings,
+} from '../input/bindings.js';
 import { composeScene } from '../game/scene.js';
 import { makeFighter, makeMatch, stepMatch, TICK_HZ } from '../game/engine.js';
 import { emptyInputs, type Match } from '../game/types.js';
@@ -53,6 +62,10 @@ export class Session {
   usernameBuf = '';
   errorMsg = '';
   helpOpen = false;
+  keyBindings: KeyBindings = DEFAULT_KEY_BINDINGS;
+  controlsCursor = 0;
+  bindingCapture: BindableAction | null = null;
+  controlsNotice = '';
   renderMode: RenderMode = 'half';
   leader: db.LeaderRow[] = [];
   result: MatchResult | null = null;
@@ -87,11 +100,13 @@ export class Session {
     this.guest = !fp;
     if (fp) {
       this.player = db.touchOrCreate(fp);
+      this.keyBindings = parseKeyBindings(this.player.key_bindings_json);
       if (this.player.username) { this.username = this.player.username; this.screen = 'menu'; this.cursor = this.player.main_char; }
       else this.screen = 'username';
     } else {
       this.screen = 'username'; // guests still pick a display name (not persisted)
     }
+    this.fightInput = new InputState(this.keyBindings);
   }
 
   get displayName(): string { return this.player?.username ?? this.username; }
@@ -143,6 +158,7 @@ export class Session {
     if (previous !== screen) this.screenInputGuardUntil = Date.now() + 120;
     this.write(CLEAR_SCREEN);
     if (screen === 'leaderboard') this.leader = db.leaderboard(10);
+    if (screen === 'controls') { this.bindingCapture = null; this.controlsNotice = ''; }
     if (previous !== screen) this.trackEvent('screen_view', { from: previous, to: screen });
   }
 
@@ -156,7 +172,7 @@ export class Session {
     let data = d;
     // 'v' toggles the pixel renderer (octant <-> half-block) everywhere except
     // while typing a username (where 'v' is a normal character).
-    if (this.screen !== 'username' && this.screen !== 'lounge' && /[vV]/.test(data.toString('latin1'))) {
+    if (this.screen !== 'username' && this.screen !== 'lounge' && this.screen !== 'controls' && /[vV]/.test(data.toString('latin1'))) {
       this.renderMode = this.renderMode === 'octant' ? 'half' : 'octant';
       this.trackEvent('renderer_changed', { mode: this.renderMode });
       this.prevFrame = null;
@@ -173,7 +189,7 @@ export class Session {
     }
     for (const key of parseKeys(data)) {
       if (this.helpOpen) { this.helpOpen = false; this.prevFrame = null; continue; }
-      if (key.t === 'help') { this.helpOpen = true; this.prevFrame = null; this.trackEvent('help_opened', { screen: this.screen }); continue; }
+      if (key.t === 'help' && !(this.screen === 'controls' && this.bindingCapture)) { this.helpOpen = true; this.prevFrame = null; this.trackEvent('help_opened', { screen: this.screen }); continue; }
       if (key.t === 'quit') { this.close(); return; }
       const screenBefore: ScreenName = this.screen;
       SCREENS[this.screen].onKey(this, key);
@@ -221,7 +237,7 @@ export class Session {
       // is a separate text-cell overlay, so font zoom never scales it below one
       // readable terminal glyph per character.
       f.usePixel(composeScene(this.match, false, cols * 2, rows * 4, this.practice));
-      drawFightHud(f, this.match, this.practice);
+      drawFightHud(f, this.match, this.practice, this.keyBindings);
     } else {
       SCREENS[this.screen].render(this, f);
     }
@@ -235,7 +251,7 @@ export class Session {
   // ---------- fight orchestration ----------
   startVersus(match: Match, role: 'a' | 'b', peer: Session, isStepper: boolean): void {
     this.match = match; this.role = role; this.peer = peer; this.isStepper = isStepper;
-    this.practice = false; this.fightInput = new InputState();
+    this.practice = false; this.fightInput = new InputState(this.keyBindings);
     this.lastAttackA = 'none'; this.lastAttackB = 'none';
     this.screen = 'fight'; this.prevFrame = null;
     this.write(CLEAR_SCREEN + HIDE_CURSOR + NOWRAP);
@@ -249,7 +265,7 @@ export class Session {
     const m = makeMatch(fa, fb);
     m.phase = 'fight'; m.phaseTimer = 0; m.message = '';
     this.match = m; this.role = 'a'; this.peer = null; this.isStepper = true;
-    this.practice = true; this.fightInput = new InputState();
+    this.practice = true; this.fightInput = new InputState(this.keyBindings);
     this.lastAttackA = 'none'; this.lastAttackB = 'none';
     MATCH_IDS.set(m, eventId('practice'));
     this.trackEvent('practice_started', { fighter: you.name, dummy: dummy.name, stage: m.stage, match_id: MATCH_IDS.get(m) });
@@ -347,6 +363,24 @@ export class Session {
   cancelChallenge(): void { SOCIAL.cancel(this); }
   acceptChallenge(): void { SOCIAL.accept(this); }
   declineChallenge(): void { SOCIAL.decline(this); }
+
+  setKeyBinding(action: BindableAction, binding: BindingToken): void {
+    this.keyBindings = withBinding(this.keyBindings, action, binding);
+    this.persistKeyBindings();
+    this.trackEvent('key_binding_changed', { action, binding });
+  }
+
+  resetKeyBindings(): void {
+    this.keyBindings = DEFAULT_KEY_BINDINGS;
+    this.persistKeyBindings();
+    this.trackEvent('key_bindings_reset');
+  }
+
+  private persistKeyBindings(): void {
+    if (!this.fp) return;
+    db.setKeyBindings(this.fp, serializeKeyBindings(this.keyBindings));
+    this.player = db.getByFingerprint(this.fp) ?? this.player;
+  }
 
   close(): void {
     if (!this.alive) return;

@@ -20,6 +20,7 @@ export interface Player {
   rounds_won: number;
   elo: number;
   peak_elo: number;
+  key_bindings_json: string | null;
   created_at: number;
   last_seen: number;
 }
@@ -46,6 +47,13 @@ export interface ChatMessage {
   id: number;
   username: string;
   message: string;
+  created_at: number;
+}
+
+export interface AnalyticsEvent {
+  id: number;
+  event: string;
+  fields_json: string;
   created_at: number;
 }
 
@@ -84,6 +92,14 @@ export function initDb(): void {
       message TEXT NOT NULL,
       created_at INTEGER NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS analytics_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      event TEXT NOT NULL,
+      fields_json TEXT NOT NULL CHECK(json_valid(fields_json)),
+      created_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_analytics_events_created_at ON analytics_events(created_at);
+    CREATE INDEX IF NOT EXISTS idx_analytics_events_event_created ON analytics_events(event, created_at);
   `);
   // Additive migrations for databases created before ratings were introduced.
   const ensureColumn = (table: string, column: string, sql: string): void => {
@@ -92,6 +108,7 @@ export function initDb(): void {
   };
   ensureColumn('players', 'elo', 'elo INTEGER NOT NULL DEFAULT 1200');
   ensureColumn('players', 'peak_elo', 'peak_elo INTEGER NOT NULL DEFAULT 1200');
+  ensureColumn('players', 'key_bindings_json', 'key_bindings_json TEXT');
   ensureColumn('match_history', 'winner_elo_before', 'winner_elo_before INTEGER');
   ensureColumn('match_history', 'winner_elo_after', 'winner_elo_after INTEGER');
   ensureColumn('match_history', 'loser_elo_before', 'loser_elo_before INTEGER');
@@ -128,6 +145,10 @@ export function setUsername(fp: string, name: string): boolean {
 
 export function setMainChar(fp: string, idx: number): void {
   db.prepare('UPDATE players SET main_char = ? WHERE fingerprint = ?').run(idx, fp);
+}
+
+export function setKeyBindings(fp: string, json: string): void {
+  db.prepare('UPDATE players SET key_bindings_json = ? WHERE fingerprint = ?').run(json, fp);
 }
 
 export function recordMatch(
@@ -206,4 +227,20 @@ export function chatHistory(limit = 100): ChatMessage[] {
   return db.prepare(`SELECT id, username, message, created_at FROM (
     SELECT id, username, message, created_at FROM chat_messages ORDER BY id DESC LIMIT ?
   ) ORDER BY id ASC`).all(limit) as ChatMessage[];
+}
+
+export function addAnalyticsEvent(
+  event: string,
+  fields: Record<string, string | number | boolean | null | undefined>,
+  at: string,
+): void {
+  const createdAt = Date.parse(at);
+  const cleanFields = Object.fromEntries(Object.entries(fields).filter(([, value]) => value !== undefined));
+  db.prepare('INSERT INTO analytics_events (event, fields_json, created_at) VALUES (?, ?, ?)')
+    .run(event, JSON.stringify(cleanFields), Number.isFinite(createdAt) ? createdAt : Date.now());
+}
+
+export function analyticsEvents(limit = 100): AnalyticsEvent[] {
+  return db.prepare('SELECT id, event, fields_json, created_at FROM analytics_events ORDER BY id DESC LIMIT ?')
+    .all(limit) as AnalyticsEvent[];
 }

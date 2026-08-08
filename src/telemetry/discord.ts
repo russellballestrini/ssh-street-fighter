@@ -10,6 +10,17 @@ interface EventItem {
   attempts: number;
 }
 
+type AnalyticsSink = (event: string, fields: TelemetryFields, at: string) => void;
+
+/** Human-actionable community events. Everything else remains local analytics only. */
+export const DISCORD_EVENTS = new Set([
+  'quick_match_queued',
+  'match_started',
+  'match_won',
+  'match_forfeit',
+  'chat_message',
+]);
+
 const MAX_QUEUE = 200;
 const SEND_GAP_MS = 450;
 const RETRIES = 2;
@@ -17,6 +28,7 @@ const queue: EventItem[] = [];
 let pumping = false;
 let dropped = 0;
 let idleWaiters: Array<() => void> = [];
+let analyticsSink: AnalyticsSink | null = null;
 
 function webhook(): string | null {
   const raw = process.env.SF_DISCORD_WEBHOOK?.trim();
@@ -114,10 +126,19 @@ async function pump(): Promise<void> {
 
 /** Enqueue an event without awaiting network I/O in the game loop. */
 export function track(event: string, fields: TelemetryFields = {}): void {
-  if (!webhook()) return;
+  const normalized = clean(event, 80).toLowerCase().replace(/[^a-z0-9_-]+/g, '_');
+  const at = new Date().toISOString();
+  try { analyticsSink?.(normalized, fields, at); }
+  catch (error) { console.warn('[analytics] failed to record an event', error); }
+  if (!DISCORD_EVENTS.has(normalized) || !webhook()) return;
   if (queue.length >= MAX_QUEUE) { queue.shift(); dropped++; }
-  queue.push({ event: clean(event, 80).toLowerCase().replace(/[^a-z0-9_-]+/g, '_'), fields, at: new Date().toISOString(), attempts: 0 });
+  queue.push({ event: normalized, fields, at, attempts: 0 });
   void pump();
+}
+
+/** Install the local append-only event sink after database initialization. */
+export function setAnalyticsSink(sink: AnalyticsSink | null): void {
+  analyticsSink = sink;
 }
 
 /** A short irreversible identity reference; raw SSH fingerprints never leave the process. */

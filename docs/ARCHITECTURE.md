@@ -8,8 +8,9 @@ OpenSSH client
    ▼
 ssh2 server ──► Session ──► screen / Arena / SocialHub
                    │                  │
-                   │                  ├── SQLite: identity, ELO, matches, chat
-                   │                  └── optional Discord event queue
+                   │                  ├── SQLite: identity, controls, ELO,
+                   │                  │           matches, chat, all events
+                   │                  └── vital-only Discord event queue
                    ▼
              30 Hz combat engine
                    │ shared Match state
@@ -50,6 +51,14 @@ Public-key authentication verifies the supplied signature, then hashes the key i
 
 Schema upgrades are additive at startup. The game never needs a separate migration command for existing installations.
 
+Each verified player can persist a JSON key map on the same public-key identity row. The map is schema-checked at load, requires unique bindings, and falls back atomically to the safe defaults if stored data is malformed. Guests use the same control system in memory without creating a durable identity.
+
 ## Social layer
 
 The in-process `SocialHub` owns lounge presence and direct challenge state. Chat history is durable in SQLite; presence and pending challenges are intentionally ephemeral. Challenges can be accepted, declined, or cancelled; acceptance removes both players from the lounge and pairs them directly through the same `Arena` path used by matchmaking.
+
+## Analytics and Discord
+
+Every instrumented event passes through one telemetry boundary and is appended to `analytics_events` before any external delivery decision. A small explicit allowlist permits only quick-match waiting, match start/result, forfeit, and chat events to reach an optional Discord webhook. Noisy operational events—special moves, renderer and resolution changes, connections, screen views, and control edits—remain local for aggregate analytics. Discord failure never blocks the game loop.
+
+The future public analytics API must aggregate or redact local fields rather than expose raw event rows. The full event/privacy contract is documented in [ANALYTICS.md](ANALYTICS.md).

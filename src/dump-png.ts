@@ -23,10 +23,12 @@ db.addChatMessage('THOMAS', 'Winner stays on.');
 
 const { Frame } = await import('./render/frame.js');
 const { SCREENS } = await import('./screens/index.js');
+const { DEFAULT_KEY_BINDINGS } = await import('./input/bindings.js');
 
 function fake(o: Record<string, unknown>): any {
   return { frame: 6, displayName: 'THOMAS', usernameBuf: 'THOM', errorMsg: '', guest: false,
     player: db.getByFingerprint('fp:tom'), fp: 'fp:tom', menuIndex: 0, cursor: 2,
+    keyBindings: DEFAULT_KEY_BINDINGS, controlsCursor: 5, bindingCapture: null, controlsNotice: 'PUNCH SET TO J',
     selectMode: 'lobby', leader: db.leaderboard(10), result: null,
     loungeFocus: 'players', loungeCursor: 0, chatBuf: 'run it back?', loungeNotice: 'SELECT A PLAYER AND PRESS ENTER',
     incomingChallenge: null, outgoingChallenge: null,

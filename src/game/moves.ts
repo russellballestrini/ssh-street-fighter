@@ -91,9 +91,14 @@ function directionGlyph(token: RelativeDirection, facing: 1 | -1): string {
   return facing === 1 ? '←' : '→';
 }
 
-export function specialMoveInput(move: SpecialMoveDefinition, facing: 1 | -1, compact = false): string {
+export function specialMoveInput(
+  move: SpecialMoveDefinition,
+  facing: 1 | -1,
+  compact = false,
+  buttonKeys: Readonly<Record<AttackButton, string>> = BUTTON_KEY,
+): string {
   const separator = compact ? '' : ' ';
-  return `${move.motion.map((d) => directionGlyph(d, facing)).join(separator)} + ${BUTTON_KEY[move.button]}`;
+  return `${move.motion.map((d) => directionGlyph(d, facing)).join(separator)} + ${buttonKeys[move.button]}`;
 }
 
 /** Resolve the first matching move, preserving punch-over-kick input priority. */
