@@ -1,0 +1,7 @@
+# Native/postinstall build scripts this project trusts (pnpm blocks all others).
+allowBuilds:
+  better-sqlite3: true
+  cpu-features: true
+  esbuild: true
+  sharp: true
+  ssh2: true
