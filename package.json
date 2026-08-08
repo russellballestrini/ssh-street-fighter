@@ -16,7 +16,7 @@
     "test": "pnpm typecheck && pnpm test:engine && pnpm test:assets && pnpm test:db && pnpm test:render && pnpm test:telemetry",
     "test:e2e": "tsx src/social-test.ts && tsx src/ssh-test.ts && tsx src/practice-test.ts",
     "render-test": "tsx src/render-test.ts",
-    "keygen": "ssh-keygen -t ed25519 -f keys/host.key -N \"\""
+    "keygen": "mkdir -p keys && if [ ! -f keys/host.key ]; then ssh-keygen -t ed25519 -f keys/host.key -N \"\"; fi"
   },
   "dependencies": {
     "better-sqlite3": "^13.0.3",
