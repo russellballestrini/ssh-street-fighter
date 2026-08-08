@@ -1,7 +1,26 @@
 import { createHash, randomUUID } from 'crypto';
+import { recordEvent } from '../db/db.js';
 
 export type TelemetryValue = string | number | boolean | null | undefined;
 export type TelemetryFields = Record<string, TelemetryValue>;
+
+// Discord is a social surface, not an event log: only announce moments another
+// player could act on (someone to fight, something said). Everything else is
+// recorded in the events table for the future analytics page. Override with
+// SF_DISCORD_EVENTS as a comma-separated event list.
+const VITAL_EVENTS = new Set([
+  'quick_match_queued',   // somebody is waiting for a match
+  'match_started',        // somebody got matched up
+  'chat_message',         // chat room message
+  'challenge_sent',       // somebody is waiting on a direct challenge
+  'challenge_accepted',   // direct challenge became a match
+]);
+
+function discordWorthy(event: string): boolean {
+  const raw = process.env.SF_DISCORD_EVENTS?.trim();
+  if (!raw) return VITAL_EVENTS.has(event);
+  return raw.split(',').map((name) => name.trim().toLowerCase()).includes(event);
+}
 
 interface EventItem {
   event: string;
@@ -112,11 +131,16 @@ async function pump(): Promise<void> {
   notifyIdle();
 }
 
-/** Enqueue an event without awaiting network I/O in the game loop. */
+/**
+ * Record an event without awaiting network I/O in the game loop. Every event
+ * is persisted for analytics; only the vital subset is announced on Discord.
+ */
 export function track(event: string, fields: TelemetryFields = {}): void {
-  if (!webhook()) return;
+  const name = clean(event, 80).toLowerCase().replace(/[^a-z0-9_-]+/g, '_');
+  try { recordEvent(name, JSON.stringify(fields)); } catch { /* analytics must never break gameplay */ }
+  if (!webhook() || !discordWorthy(name)) return;
   if (queue.length >= MAX_QUEUE) { queue.shift(); dropped++; }
-  queue.push({ event: clean(event, 80).toLowerCase().replace(/[^a-z0-9_-]+/g, '_'), fields, at: new Date().toISOString(), attempts: 0 });
+  queue.push({ event: name, fields, at: new Date().toISOString(), attempts: 0 });
   void pump();
 }
 

@@ -30,5 +30,11 @@ const board = db.leaderboard(10);
 assert(board[0]?.username === 'ALPHA' && board[0]?.elo === 1231, 'leaderboard is ordered by ELO');
 assert(db.playerRank('fp:a') === 1 && db.playerRank('fp:b') === 2, 'player rank follows ELO order');
 
+db.recordEvent('match_started', '{"player_a":"ALPHA"}');
+db.recordEvent('special_move_used', '{"move":"HADOUKEN"}');
+const events = db.recentEvents(10);
+assert(events.length === 2 && events[0]?.event === 'special_move_used', 'events land in the analytics table, newest first');
+assert(JSON.parse(events[1]?.fields ?? '{}').player_a === 'ALPHA', 'event fields survive as JSON');
+
 console.log(process.exitCode ? 'DB TEST: FAIL' : 'DB TEST: PASS');
 process.exit(process.exitCode ?? 0);

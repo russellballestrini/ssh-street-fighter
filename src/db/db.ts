@@ -24,6 +24,13 @@ export interface Player {
   last_seen: number;
 }
 
+export interface StoredEvent {
+  id: number;
+  event: string;
+  fields: string;
+  created_at: number;
+}
+
 export interface LeaderRow {
   username: string;
   wins: number;
@@ -84,6 +91,13 @@ export function initDb(): void {
       message TEXT NOT NULL,
       created_at INTEGER NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      event TEXT NOT NULL,
+      fields TEXT NOT NULL,
+      created_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_events_event_time ON events (event, created_at);
   `);
   // Additive migrations for databases created before ratings were introduced.
   const ensureColumn = (table: string, column: string, sql: string): void => {
@@ -128,6 +142,20 @@ export function setUsername(fp: string, name: string): boolean {
 
 export function setMainChar(fp: string, idx: number): void {
   db.prepare('UPDATE players SET main_char = ? WHERE fingerprint = ?').run(idx, fp);
+}
+
+/**
+ * Full event firehose for the future analytics page. Every telemetry event
+ * lands here; Discord only receives the vital subset. No-op before initDb so
+ * tools and tests can emit telemetry without opening the database.
+ */
+export function recordEvent(event: string, fieldsJson: string): void {
+  if (!db) return;
+  db.prepare('INSERT INTO events (event, fields, created_at) VALUES (?, ?, ?)').run(event, fieldsJson, Date.now());
+}
+
+export function recentEvents(limit = 100): StoredEvent[] {
+  return db.prepare('SELECT id, event, fields, created_at FROM events ORDER BY id DESC LIMIT ?').all(limit) as StoredEvent[];
 }
 
 export function recordMatch(
