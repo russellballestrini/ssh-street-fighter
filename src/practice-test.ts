@@ -61,10 +61,12 @@ const before = bytes;
 for (let i = 0; i < 25; i++) { stream.write(i % 2 ? '\x1b[C' : 'w'); await sleep(80); }
 const during = bytes - before;
 conn.end();
-const ok = during > 8000 && fightReady && moveHelp;
+const truecolor = transcript.includes('\x1b[38;2;') || transcript.includes('\x1b[48;2;');
+const ok = during > 8000 && fightReady && moveHelp && truecolor;
 console.log(`practice frames streamed: ${during} bytes`);
 console.log(`practice fight ready: ${fightReady}`);
 console.log(`character move help rendered: ${moveHelp}`);
+console.log(`truecolor ANSI rendered: ${truecolor}`);
 if (!moveHelp) console.log(`move help markers: ${JSON.stringify(helpMarkers)}`);
 console.log(ok ? 'PRACTICE TEST: PASS' : 'PRACTICE TEST: FAIL');
 if (localServer) await new Promise<void>((resolve) => localServer!.close(() => resolve()));

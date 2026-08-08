@@ -1,14 +1,19 @@
 // End-to-end: boot server, connect two guest clients, drive the full flow
 // (username -> menu -> join lobby -> pick fighter -> fight), confirm both stream.
-process.env.SF_DB = '/tmp/sf-test.db';
+// Set SF_TEST_PORT to exercise an already-running server instead of booting one.
+const externalPort = parseInt(process.env.SF_TEST_PORT ?? '0', 10);
+if (!externalPort) process.env.SF_DB = '/tmp/sf-test.db';
 import ssh2 from 'ssh2';
 import { unlinkSync } from 'fs';
 
-try { unlinkSync('/tmp/sf-test.db'); } catch { /* fresh */ }
-const PORT = 22999;
-// dynamic import AFTER setting SF_DB (ESM hoists static imports above assignments)
-const { startServer } = await import('./net/ssh-server.js');
-const server = startServer(PORT, '127.0.0.1', 'keys/host.key');
+if (!externalPort) try { unlinkSync('/tmp/sf-test.db'); } catch { /* fresh */ }
+const PORT = externalPort || 22999;
+let server: import('ssh2').Server | null = null;
+if (!externalPort) {
+  // dynamic import AFTER setting SF_DB (ESM hoists static imports above assignments)
+  const { startServer } = await import('./net/ssh-server.js');
+  server = startServer(PORT, '127.0.0.1', 'keys/host.key');
+}
 
 interface C { bytes: number; conn: ssh2.Client; stream?: any; }
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -42,8 +47,9 @@ async function main(): Promise<void> {
   const a = await connect('aaa');
   const b = await connect('bbb');
   await sleep(200);
-  await typeName(a, 'AAA');
-  await typeName(b, 'BBB');   // second confirm pairs them into a fight
+  const runId = externalPort ? Date.now().toString().slice(-6) : '';
+  await typeName(a, externalPort ? `QMA${runId}` : 'AAA');
+  await typeName(b, externalPort ? `QMB${runId}` : 'BBB');   // second confirm pairs them into a fight
   console.log('both in match; brawling...');
 
   const samples: number[] = []; let last = a.bytes;
@@ -61,7 +67,7 @@ async function main(): Promise<void> {
   const rows = (db as any); void rows;
   a.conn.end(); b.conn.end();
   console.log(streaming ? '\nSSH TEST: PASS (full flow + live fight frames)' : '\nSSH TEST: FAIL');
-  await new Promise<void>((resolve) => server.close(() => resolve()));
+  if (server) await new Promise<void>((resolve) => server!.close(() => resolve()));
   await sleep(100);
   process.exit(streaming ? 0 : 1);
 }

@@ -1,13 +1,18 @@
 // Two-client E2E for the live lounge: persistent chat, player selection,
 // challenge delivery/acceptance, then direct transition into a streamed fight.
-process.env.SF_DB = '/tmp/sf-social-test.db';
+// Set SF_TEST_PORT to exercise an already-running server instead of booting one.
+const externalPort = parseInt(process.env.SF_TEST_PORT ?? '0', 10);
+if (!externalPort) process.env.SF_DB = '/tmp/sf-social-test.db';
 import ssh2 from 'ssh2';
 import { unlinkSync } from 'fs';
 
-try { unlinkSync(process.env.SF_DB); } catch { /* fresh */ }
-const PORT = 22997;
-const { startServer } = await import('./net/ssh-server.js');
-const server = startServer(PORT, '127.0.0.1', 'keys/host.key');
+if (!externalPort) try { unlinkSync(process.env.SF_DB!); } catch { /* fresh */ }
+const PORT = externalPort || 22997;
+let server: import('ssh2').Server | null = null;
+if (!externalPort) {
+  const { startServer } = await import('./net/ssh-server.js');
+  server = startServer(PORT, '127.0.0.1', 'keys/host.key');
+}
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 interface Client { conn: ssh2.Client; stream: any; transcript: string; bytes: number }
@@ -37,16 +42,21 @@ async function waitFor(check: () => boolean, timeout = 5000): Promise<boolean> {
   return check();
 }
 
-const alpha = await connect('ALPHA');
-const bravo = await connect('BRAVO');
+const runId = externalPort ? Date.now().toString().slice(-6) : '';
+const alphaName = externalPort ? `LVA${runId}` : 'ALPHA';
+const bravoName = externalPort ? `LVB${runId}` : 'BRAVO';
+const alpha = await connect(alphaName);
+const bravo = await connect(bravoName);
 const loungeReady = await waitFor(() => alpha.transcript.includes('FIGHT LOUNGE') && bravo.transcript.includes('FIGHT LOUNGE'));
+const playerVisible = await waitFor(() => alpha.transcript.includes(bravoName));
 
-alpha.stream.write('hello from alpha'); alpha.stream.write('\r');
-const chatDelivered = await waitFor(() => bravo.transcript.includes('hello from alpha'));
+const chatText = externalPort ? `live challenge ${runId}` : 'hello from alpha';
+alpha.stream.write(chatText); alpha.stream.write('\r');
+const chatDelivered = await waitFor(() => bravo.transcript.includes(chatText));
 
 alpha.stream.write('\t'); await sleep(100); // players focus
 alpha.stream.write('\r');
-const challengeDelivered = await waitFor(() => bravo.transcript.includes('ALPHA CHALLENGED YOU'));
+const challengeDelivered = await waitFor(() => bravo.transcript.includes(`${alphaName} CHALLENGED YOU`));
 bravo.stream.write('y');
 await sleep(700);
 const before = alpha.bytes;
@@ -54,13 +64,14 @@ for (let i = 0; i < 18; i++) { alpha.stream.write(i % 2 ? 'w' : '\x1b[C'); bravo
 const fightStreamed = alpha.bytes - before > 8000;
 
 const db = await import('./db/db.js');
-const persisted = db.chatHistory(10).some((m) => m.username === 'ALPHA' && m.message === 'hello from alpha');
+if (externalPort) db.initDb();
+const persisted = db.chatHistory(10).some((m) => m.username === alphaName && m.message === chatText);
 alpha.conn.end(); bravo.conn.end();
 
-const checks = { loungeReady, chatDelivered, challengeDelivered, fightStreamed, persisted };
+const checks = { loungeReady, playerVisible, chatDelivered, challengeDelivered, fightStreamed, persisted };
 for (const [name, ok] of Object.entries(checks)) console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}`);
 const ok = Object.values(checks).every(Boolean);
 console.log(ok ? 'SOCIAL TEST: PASS' : 'SOCIAL TEST: FAIL');
-await new Promise<void>((resolve) => server.close(() => resolve()));
+if (server) await new Promise<void>((resolve) => server!.close(() => resolve()));
 await sleep(100);
 process.exit(ok ? 0 : 1);
