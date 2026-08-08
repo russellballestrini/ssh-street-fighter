@@ -14,8 +14,8 @@ ssh2 server ──► Session ──► screen / Arena / SocialHub
              30 Hz combat engine
                    │ shared Match state
                    ▼
-       stage + sprites + motifs + pixel HUD
-                   │
+          stage + sprites + motifs
+                   │ + adaptive text-cell HUD
                    ▼
       RGB PixelGrid → terminal cells → ANSI diff
                    │ zlib + backpressure
@@ -27,7 +27,7 @@ ssh2 server ──► Session ──► screen / Arena / SocialHub
 
 The scene is composed into an RGB pixel grid. A terminal cell represents a pair of vertical color regions in half-block mode, giving two addressable pixels per cell with independent foreground and background colors. The renderer then compares the new terminal-cell array with the previous frame and emits cursor moves plus only the SGR channels that changed.
 
-The fight world and HUD share this renderer. Menus use a text-cell layer with the same color model, so overlays remain crisp at terminal-native resolution.
+The fight world uses the pixel renderer while critical HUD information—fighter names, numeric health, health bars, wins, round, timer, announcements, and controls—uses a text-cell overlay with the same color model. The HUD recomposes at content-driven terminal-width tiers, keeping every critical label at one real terminal glyph per character even when font zoom leaves only a 24×12 grid.
 
 The server preserves 24-bit values by default. `SF_COLOR_STEP` and `SF_COLOR_MODE=256` exist only as explicit compatibility controls.
 

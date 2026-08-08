@@ -17,7 +17,7 @@ ssh -p 2223 streetfighter.blah.dev
 
 [Play now](#play-now) · [Browse the sprite gallery](https://streetfighter.blah.dev) · [How it works](docs/ARCHITECTURE.md) · [Contribute](CONTRIBUTING.md)
 
-<img src="docs/screenshots/gameplay.png" alt="BLANKO performing Electric Thunder against CHONG on Storm Harbor" width="100%">
+<img src="docs/screenshots/gameplay.png" alt="BYU fighting MEN beneath the responsive terminal-native HUD" width="100%">
 
 </div>
 
@@ -30,7 +30,7 @@ SSH Street Fighter is a full two-player fighting game rendered with 24-bit ANSI 
 - **Real motion inputs** with a packet-safe input buffer for split SSH escape sequences
 - **Best-of-three online fights**, solo practice, direct challenges, and a quick-match queue
 - **Persistent ELO ratings**, records, leaderboard, handles, and lounge chat
-- **Renderer-native HUD** sharing the same pixel grid as the game world
+- **Zoom-proof adaptive HUD** using crisp terminal glyphs over the renderer-native world
 - **Truecolor by default**, compressed and diff-streamed without flattening the palette
 - **A live sprite gallery** for inspecting every animation pose
 

@@ -7,6 +7,7 @@ const PORT = externalPort || 22998;
 const testFighter = (process.env.SF_TEST_FIGHTER ?? 'BYU').toUpperCase();
 const testCols = parseInt(process.env.SF_TEST_COLS ?? '120', 10);
 const testRows = parseInt(process.env.SF_TEST_ROWS ?? '42', 10);
+const hudOnly = process.env.SF_TEST_HUD_ONLY === '1';
 const { ROSTER } = await import('./game/roster.js');
 const { specialMovesFor } = await import('./game/moves.js');
 const fighterIndex = ROSTER.findIndex((c) => c.name === testFighter);
@@ -41,11 +42,15 @@ stream.write('\r'); await sleep(150);   // username -> menu
 stream.write('ss'); await sleep(120);   // menu: move to PRACTICE (index 2)
 stream.write('\r'); await sleep(150);   // -> character select (practice)
 for (let i = 0; i < fighterIndex; i++) { stream.write('\x1b[C'); await sleep(70); }
+const fightStart = transcript.length;
 stream.write('\r');                     // pick fighter -> practice fight
-const fightReady = await waitFor(() => transcript.includes('PRACTICE  -  Q TO EXIT'), 5000);
-const helpStart = transcript.length;
-stream.write('?');                       // in-fight, character-aware move list
+const dummyName = ROSTER[(fighterIndex + 1) % ROSTER.length]!.name;
+const fightReady = await waitFor(() => {
+  const output = transcript.slice(fightStart);
+  return output.includes('TRAIN') && output.includes(testFighter) && output.includes(dummyName);
+}, 5000);
 const expectedMoveNames = specialMovesFor(testFighter).map((move) => move.name);
+const helpStart = transcript.length;
 const readHelpMarkers = () => {
   const output = transcript.slice(helpStart);
   return {
@@ -53,9 +58,10 @@ const readHelpMarkers = () => {
     moves: expectedMoveNames.every((name) => output.includes(name)),
   };
 };
-const moveHelp = await waitFor(() => Object.values(readHelpMarkers()).every(Boolean), 3000);
+if (!hudOnly) stream.write('?');         // in-fight, character-aware move list
+const moveHelp = hudOnly || await waitFor(() => Object.values(readHelpMarkers()).every(Boolean), 3000);
 const helpMarkers = readHelpMarkers();
-stream.write('?'); await sleep(100);    // any key closes without becoming a fight input
+if (!hudOnly) { stream.write('?'); await sleep(100); } // close without becoming a fight input
 const before = bytes;
 // throw some moves at the dummy
 for (let i = 0; i < 25; i++) { stream.write(i % 2 ? '\x1b[C' : 'w'); await sleep(80); }
@@ -64,8 +70,8 @@ conn.end();
 const truecolor = transcript.includes('\x1b[38;2;') || transcript.includes('\x1b[48;2;');
 const ok = during > 8000 && fightReady && moveHelp && truecolor;
 console.log(`practice frames streamed: ${during} bytes`);
-console.log(`practice fight ready: ${fightReady}`);
-console.log(`character move help rendered: ${moveHelp}`);
+console.log(`responsive fight HUD rendered: ${fightReady}`);
+console.log(`character move help rendered: ${hudOnly ? 'skipped (HUD-only matrix)' : moveHelp}`);
 console.log(`truecolor ANSI rendered: ${truecolor}`);
 if (!moveHelp) console.log(`move help markers: ${JSON.stringify(helpMarkers)}`);
 console.log(ok ? 'PRACTICE TEST: PASS' : 'PRACTICE TEST: FAIL');

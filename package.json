@@ -12,8 +12,9 @@
     "test:assets": "tsx src/assets-test.ts",
     "test:db": "tsx src/db-test.ts",
     "test:render": "tsx src/tools/diff-verify.ts",
+    "test:hud": "tsx src/hud-test.ts",
     "test:telemetry": "tsx src/telemetry-test.ts",
-    "test": "pnpm typecheck && pnpm test:engine && pnpm test:assets && pnpm test:db && pnpm test:render && pnpm test:telemetry",
+    "test": "pnpm typecheck && pnpm test:engine && pnpm test:assets && pnpm test:db && pnpm test:render && pnpm test:hud && pnpm test:telemetry",
     "test:e2e": "tsx src/navigation-test.ts && tsx src/social-test.ts && tsx src/ssh-test.ts && tsx src/practice-test.ts",
     "render-test": "tsx src/render-test.ts",
     "keygen": "mkdir -p keys && if [ ! -f keys/host.key ]; then ssh-keygen -t ed25519 -f keys/host.key -N \"\"; fi"

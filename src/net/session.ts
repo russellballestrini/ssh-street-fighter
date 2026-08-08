@@ -217,11 +217,10 @@ export class Session {
     const rows = clamp(this.rows || 40, 12, MAX_ROWS);
     const f = new Frame(cols, rows, this.renderMode);
     if (this.screen === 'fight' && this.match) {
-      // render the stage at the terminal's native pixel resolution — more cells
-      // => more world pixels => sharper sprites (zoom out for higher fidelity).
-      // The fight HUD shares the native PixelGrid renderer with the stage;
-      // only the compact key legend remains terminal text for tiny displays.
-      f.usePixel(composeScene(this.match, true, cols * 2, rows * 4, this.practice));
+      // Render the stage at native pixel resolution. Critical HUD information
+      // is a separate text-cell overlay, so font zoom never scales it below one
+      // readable terminal glyph per character.
+      f.usePixel(composeScene(this.match, false, cols * 2, rows * 4, this.practice));
       drawFightHud(f, this.match, this.practice);
     } else {
       SCREENS[this.screen].render(this, f);
