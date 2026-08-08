@@ -1,11 +1,15 @@
-process.env.SF_DB = '/tmp/sf-controls-test.db';
+const externalPort = parseInt(process.env.SF_TEST_PORT ?? '0', 10);
+if (!externalPort) process.env.SF_DB = '/tmp/sf-controls-test.db';
 import ssh2 from 'ssh2';
 import { unlinkSync } from 'fs';
 
-try { unlinkSync(process.env.SF_DB); } catch { /* fresh */ }
-const PORT = 22994;
-const { startServer } = await import('./net/ssh-server.js');
-const server = startServer(PORT, '127.0.0.1', 'keys/host.key');
+if (!externalPort) try { unlinkSync(process.env.SF_DB!); } catch { /* fresh */ }
+const PORT = externalPort || 22994;
+let server: import('ssh2').Server | null = null;
+if (!externalPort) {
+  const { startServer } = await import('./net/ssh-server.js');
+  server = startServer(PORT, '127.0.0.1', 'keys/host.key');
+}
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const waitFor = async (check: () => boolean, timeout = 5000): Promise<boolean> => {
   const deadline = Date.now() + timeout;
@@ -26,7 +30,7 @@ const stream = await new Promise<any>((resolve, reject) => {
 });
 
 await sleep(250);
-stream.write('KEYTEST\r');
+stream.write(`${externalPort ? `KEY${Date.now().toString().slice(-6)}` : 'KEYTEST'}\r`);
 const menuReady = await waitFor(() => transcript.includes('MAIN MENU'));
 await sleep(160);
 stream.write('ssss\r');
@@ -63,6 +67,6 @@ const checks = { menuReady, controlsOpened, duplicateRejected, punchAssigned, re
 for (const [name, ok] of Object.entries(checks)) console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}`);
 const ok = Object.values(checks).every(Boolean);
 console.log(ok ? 'CONTROLS TEST: PASS' : 'CONTROLS TEST: FAIL');
-await new Promise<void>((resolve) => server.close(() => resolve()));
+if (server) await new Promise<void>((resolve) => server!.close(() => resolve()));
 await sleep(100);
 process.exit(ok ? 0 : 1);
