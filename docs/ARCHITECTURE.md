@@ -52,4 +52,4 @@ Schema upgrades are additive at startup. The game never needs a separate migrati
 
 ## Social layer
 
-The in-process `SocialHub` owns lounge presence and direct challenge state. Chat history is durable in SQLite; presence and pending challenges are intentionally ephemeral. Accepting a challenge removes both players from the lounge and pairs them directly through the same `Arena` path used by matchmaking.
+The in-process `SocialHub` owns lounge presence and direct challenge state. Chat history is durable in SQLite; presence and pending challenges are intentionally ephemeral. Challenges can be accepted, declined, or cancelled; acceptance removes both players from the lounge and pairs them directly through the same `Arena` path used by matchmaking.

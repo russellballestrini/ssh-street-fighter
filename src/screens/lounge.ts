@@ -41,6 +41,9 @@ export const lounge = {
     if (s.incomingChallenge) {
       f.fill(0, 7, f.cols, 1, THEME.select);
       f.center(7, `${s.incomingChallenge.displayName} CHALLENGED YOU  ·  Y ACCEPT  /  N DECLINE`, THEME.selectText, THEME.select, true);
+    } else if (s.outgoingChallenge) {
+      f.fill(0, 7, f.cols, 1, THEME.select);
+      f.center(7, `CHALLENGE SENT TO ${s.outgoingChallenge.displayName}  ·  X CANCEL`, THEME.selectText, THEME.select, true);
     }
 
     const narrow = f.cols < 76;
@@ -87,6 +90,7 @@ export const lounge = {
       else if (k.t === 'esc' || (k.t === 'char' && k.ch.toLowerCase() === 'n')) s.declineChallenge();
       return;
     }
+    if (s.outgoingChallenge && k.t === 'char' && k.ch.toLowerCase() === 'x') { s.cancelChallenge(); return; }
     if (k.t === 'esc') { s.goTo('menu'); return; }
     if (k.t === 'tab') { s.loungeFocus = s.loungeFocus === 'chat' ? 'players' : 'chat'; s.loungeNotice = s.loungeFocus === 'chat' ? 'TYPE A MESSAGE' : 'SELECT A PLAYER AND PRESS ENTER'; return; }
     if (s.loungeFocus === 'chat') {

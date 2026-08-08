@@ -57,6 +57,10 @@ const chatDelivered = await waitFor(() => bravo.transcript.includes(chatText));
 alpha.stream.write('\t'); await sleep(100); // players focus
 alpha.stream.write('\r');
 const challengeDelivered = await waitFor(() => bravo.transcript.includes(`${alphaName} CHALLENGED YOU`));
+alpha.stream.write('x');
+const challengeCancelled = await waitFor(() => bravo.transcript.includes(`${alphaName} CANCELLED THE CHALLENGE`));
+alpha.stream.write('\r');
+await sleep(200);
 bravo.stream.write('y');
 await sleep(700);
 const before = alpha.bytes;
@@ -68,7 +72,7 @@ if (externalPort) db.initDb();
 const persisted = db.chatHistory(10).some((m) => m.username === alphaName && m.message === chatText);
 alpha.conn.end(); bravo.conn.end();
 
-const checks = { loungeReady, playerVisible, chatDelivered, challengeDelivered, fightStreamed, persisted };
+const checks = { loungeReady, playerVisible, chatDelivered, challengeDelivered, challengeCancelled, fightStreamed, persisted };
 for (const [name, ok] of Object.entries(checks)) console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}`);
 const ok = Object.values(checks).every(Boolean);
 console.log(ok ? 'SOCIAL TEST: PASS' : 'SOCIAL TEST: FAIL');

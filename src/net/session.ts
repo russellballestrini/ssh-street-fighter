@@ -335,6 +335,7 @@ export class Session {
     this.loungeCursor = clamp(this.loungeCursor, 0, players.length - 1);
     SOCIAL.challenge(this, players[this.loungeCursor]!);
   }
+  cancelChallenge(): void { SOCIAL.cancel(this); }
   acceptChallenge(): void { SOCIAL.accept(this); }
   declineChallenge(): void { SOCIAL.decline(this); }
 
@@ -496,6 +497,17 @@ class SocialHub {
     track('challenge_accepted', { challenger: from.displayName, challenged: to.displayName });
     this.touch();
     ARENA.pair(from, to, 'direct_challenge');
+  }
+
+  cancel(from: Session): void {
+    const to = from.outgoingChallenge;
+    if (!to) { from.loungeNotice = 'NO OUTGOING CHALLENGE'; return; }
+    from.outgoingChallenge = null;
+    if (to.incomingChallenge === from) to.incomingChallenge = null;
+    from.loungeNotice = `CANCELLED CHALLENGE TO ${to.displayName}`;
+    to.loungeNotice = `${from.displayName} CANCELLED THE CHALLENGE`;
+    from.prevFrame = null; to.prevFrame = null;
+    track('challenge_cancelled', { challenger: from.displayName, challenged: to.displayName });
   }
 
   decline(to: Session): void {
