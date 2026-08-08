@@ -37,7 +37,6 @@ const send = (c: C, s: string) => c.stream?.write(s);
 async function typeName(c: C, name: string): Promise<void> {
   for (const ch of name) { send(c, ch); await sleep(30); }
   send(c, '\r'); await sleep(150);           // confirm username -> menu
-  send(c, 's'); await sleep(100);             // QUICK MATCH
   send(c, '\r'); await sleep(150);           // JOIN LOBBY -> select
   send(c, '\r'); await sleep(150);           // pick fighter -> lobby/pair
 }

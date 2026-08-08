@@ -24,7 +24,13 @@ export function parseKeys(data: Buffer): Key[] {
       keys.push({ t: 'esc' });
       continue;
     }
-    if (c === '\r' || c === '\n') { keys.push({ t: 'enter' }); continue; }
+    if (c === '\r' || c === '\n') {
+      // A number of SSH terminals submit Enter as CRLF. Treat the pair as one
+      // key so the LF cannot activate the next screen after CR confirms one.
+      if (c === '\r' && s[i + 1] === '\n') i++;
+      keys.push({ t: 'enter' });
+      continue;
+    }
     if (c === '\x7f' || c === '\b') { keys.push({ t: 'backspace' }); continue; }
     if (c === '\t') { keys.push({ t: 'tab' }); continue; }
     if (c === '\x03' || c === '\x04') { keys.push({ t: 'quit' }); continue; } // Ctrl-C / Ctrl-D

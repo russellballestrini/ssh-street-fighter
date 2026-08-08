@@ -44,6 +44,8 @@ export const lounge = {
     } else if (s.outgoingChallenge) {
       f.fill(0, 7, f.cols, 1, THEME.select);
       f.center(7, `CHALLENGE SENT TO ${s.outgoingChallenge.displayName}  ·  X CANCEL`, THEME.selectText, THEME.select, true);
+    } else {
+      f.center(7, '[ESC] MAIN MENU  ·  [TAB] SWITCH CHAT / PLAYERS  ·  /MENU ALSO EXITS', THEME.textDim, THEME.bgTop, true);
     }
 
     const narrow = f.cols < 76;
@@ -79,9 +81,12 @@ export const lounge = {
 
     input(f, 2, f.rows - 6, f.cols - 4, s.chatBuf, { label: s.loungeFocus === 'chat' ? 'MESSAGE · ENTER TO SEND' : 'MESSAGE · TAB TO TYPE', focus: s.loungeFocus === 'chat', frame: s.frame, placeholder: 'say something...' });
     f.center(f.rows - 2, s.loungeNotice.slice(0, Math.max(0, f.cols - 4)), THEME.accent2, THEME.bgBot, true);
-    keyHints(f, f.rows - 1, s.loungeFocus === 'chat'
-      ? [['TYPE', 'CHAT'], ['ENTER', 'SEND'], ['TAB', 'PLAYERS'], ['ESC', 'BACK']]
-      : [['↑/↓', 'PLAYER'], ['ENTER', 'CHALLENGE'], ['TAB', 'CHAT'], ['ESC', 'BACK']]);
+    const hints: [string, string][] = s.incomingChallenge
+      ? [['Y/ENTER', 'ACCEPT'], ['N/ESC', 'DECLINE']]
+      : s.loungeFocus === 'chat'
+        ? [['TYPE', 'CHAT'], ['ENTER', 'SEND'], ['TAB', 'PLAYERS'], ['ESC', 'MAIN MENU']]
+        : [['↑/↓', 'PLAYER'], ['ENTER', 'CHALLENGE'], ['TAB', 'CHAT'], ['ESC', 'MAIN MENU']];
+    keyHints(f, f.rows - 1, hints);
   },
 
   onKey(s: Session, k: Key): void {

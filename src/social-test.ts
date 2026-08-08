@@ -30,9 +30,10 @@ async function connect(handle: string): Promise<Client> {
   });
   await sleep(200);
   client.stream.write(handle);
-  client.stream.write('\r');
+  client.stream.write('\r\n');
   await sleep(180);
-  client.stream.write('\r'); // first menu item = lounge
+  client.stream.write('s');
+  client.stream.write('\r'); // second menu item = lounge
   return client;
 }
 

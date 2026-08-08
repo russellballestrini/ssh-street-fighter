@@ -1,0 +1,60 @@
+// Regression for SSH terminals that submit Enter as CRLF: confirming a handle
+// must stop at the main menu, never bleed through into the lounge. Also proves
+// both advertised lounge exits over a real SSH session.
+process.env.SF_DB = '/tmp/sf-navigation-test.db';
+import ssh2 from 'ssh2';
+import { unlinkSync } from 'fs';
+
+try { unlinkSync(process.env.SF_DB); } catch { /* fresh */ }
+const PORT = 22996;
+const { startServer } = await import('./net/ssh-server.js');
+const server = startServer(PORT, '127.0.0.1', 'keys/host.key');
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+const waitFor = async (check: () => boolean, timeout = 4000): Promise<boolean> => {
+  const deadline = Date.now() + timeout;
+  while (Date.now() < deadline) { if (check()) return true; await sleep(40); }
+  return check();
+};
+
+let transcript = '';
+const conn = new ssh2.Client();
+const stream = await new Promise<any>((resolve, reject) => {
+  conn.on('ready', () => conn.shell({ term: 'xterm', cols: 112, rows: 36 }, (error, shell) => {
+    if (error) return reject(error);
+    shell.on('data', (data: Buffer) => { transcript += data.toString('utf8'); });
+    resolve(shell);
+  }));
+  conn.on('error', reject);
+  conn.connect({ host: '127.0.0.1', port: PORT, username: 'navigation', password: 'x', hostVerifier: () => true });
+});
+
+await sleep(200);
+stream.write('NAVTEST\r\n');
+const mainMenuAfterCrlf = await waitFor(() => transcript.includes('MAIN MENU'));
+await sleep(180);
+const didNotEnterLounge = !transcript.includes('/MENU ALSO EXITS');
+
+const loungeStart = transcript.length;
+stream.write('s\r');
+const loungeOpened = await waitFor(() => transcript.slice(loungeStart).includes('/MENU ALSO EXITS'));
+const exitIsVisible = await waitFor(() => transcript.slice(loungeStart).includes('[ESC] MAIN MENU'));
+stream.write('\x1b');
+const escapeStart = transcript.length;
+const escapeReturned = await waitFor(() => transcript.slice(escapeStart).includes('MAIN MENU'));
+
+await sleep(150);
+const secondLoungeStart = transcript.length;
+stream.write('s\r');
+await waitFor(() => transcript.slice(secondLoungeStart).includes('/MENU ALSO EXITS'));
+const commandStart = transcript.length;
+stream.write('/menu\r');
+const commandReturned = await waitFor(() => transcript.slice(commandStart).includes('MAIN MENU'));
+
+conn.end();
+const checks = { mainMenuAfterCrlf, didNotEnterLounge, loungeOpened, exitIsVisible, escapeReturned, commandReturned };
+for (const [name, passed] of Object.entries(checks)) console.log(`${passed ? 'PASS' : 'FAIL'}  ${name}`);
+const ok = Object.values(checks).every(Boolean);
+console.log(ok ? 'NAVIGATION TEST: PASS' : 'NAVIGATION TEST: FAIL');
+await new Promise<void>((resolve) => server.close(() => resolve()));
+await sleep(100);
+process.exit(ok ? 0 : 1);

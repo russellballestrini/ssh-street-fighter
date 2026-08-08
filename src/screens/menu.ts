@@ -6,7 +6,7 @@ import { THEME } from '../ui/theme.js';
 import { characterAt, ROSTER } from '../game/roster.js';
 import * as db from '../db/db.js';
 
-const ITEMS = ['FIGHT LOUNGE  (CHAT + CHALLENGE)', 'QUICK MATCH', 'PRACTICE MODE', 'LEADERBOARD', 'HELP', 'QUIT'];
+const ITEMS = ['QUICK MATCH  (PLAY ONLINE)', 'FIGHT LOUNGE  (CHAT + CHALLENGE)', 'PRACTICE MODE', 'LEADERBOARD', 'HELP', 'QUIT'];
 
 export const menu = {
   render(s: Session, f: Frame): void {
@@ -46,8 +46,8 @@ export const menu = {
     else if (k.t === 'right' || (k.t === 'char' && k.ch.toLowerCase() === 'd')) s.cursor = (s.cursor + 1) % ROSTER.length;
     else if (k.t === 'enter' || (k.t === 'char' && (k.ch === 'j' || k.ch === ' '))) {
       switch (s.menuIndex) {
-        case 0: s.enterLounge(); break;
-        case 1: s.selectMode = 'lobby'; s.goTo('select'); break;
+        case 0: s.selectMode = 'lobby'; s.goTo('select'); break;
+        case 1: s.enterLounge(); break;
         case 2: s.selectMode = 'practice'; s.goTo('select'); break;
         case 3: s.goTo('leaderboard'); break;
         case 4: s.helpOpen = true; s.prevFrame = null; break;

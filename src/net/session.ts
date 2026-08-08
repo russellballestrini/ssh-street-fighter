@@ -42,6 +42,7 @@ export class Session {
   alive = true;
   private loopTimer: NodeJS.Timeout | null = null;
   private outputBlocked = false;
+  private screenInputGuardUntil = 0;
 
   // ui state
   screen: ScreenName = 'username';
@@ -139,6 +140,7 @@ export class Session {
     this.menuIndex = 0;
     this.errorMsg = '';
     this.prevFrame = null;
+    if (previous !== screen) this.screenInputGuardUntil = Date.now() + 120;
     this.write(CLEAR_SCREEN);
     if (screen === 'leaderboard') this.leader = db.leaderboard(10);
     if (previous !== screen) this.trackEvent('screen_view', { from: previous, to: screen });
@@ -147,6 +149,9 @@ export class Session {
   // ---------- input ----------
   private onData(d: Buffer): void {
     if (!this.alive) return;
+    // Some clients split CRLF across packets. Ignore a trailing newline-only
+    // packet immediately after a transition instead of pressing Enter again.
+    if (Date.now() < this.screenInputGuardUntil && /^[\r\n]+$/.test(d.toString('latin1'))) return;
     if (this.helpOpen) { this.helpOpen = false; this.prevFrame = null; return; }
     let data = d;
     // 'v' toggles the pixel renderer (octant <-> half-block) everywhere except
@@ -170,7 +175,10 @@ export class Session {
       if (this.helpOpen) { this.helpOpen = false; this.prevFrame = null; continue; }
       if (key.t === 'help') { this.helpOpen = true; this.prevFrame = null; this.trackEvent('help_opened', { screen: this.screen }); continue; }
       if (key.t === 'quit') { this.close(); return; }
+      const screenBefore: ScreenName = this.screen;
       SCREENS[this.screen].onKey(this, key);
+      // Never let remaining bytes from one SSH packet operate the next screen.
+      if (this.screen !== screenBefore) break;
     }
   }
 
@@ -316,6 +324,7 @@ export class Session {
   enterLounge(): void {
     this.goTo('lounge');
     SOCIAL.enter(this);
+    this.loungeNotice = 'ESC RETURNS TO MAIN MENU  ·  TAB SWITCHES PANELS';
     this.trackEvent('lounge_joined', { fighter: characterAt(this.cursor).name });
   }
   loungePlayers(): Session[] { return SOCIAL.online(this); }
@@ -323,6 +332,7 @@ export class Session {
   sendChat(): void {
     const message = this.chatBuf.replace(/[^\x20-\x7e]/g, '').trim().slice(0, 140);
     if (!message) return;
+    if (message.toLowerCase() === '/menu') { this.chatBuf = ''; this.goTo('menu'); return; }
     const now = Date.now();
     if (now - this.lastChatAt < 700) { this.loungeNotice = 'SLOW DOWN - ONE MESSAGE AT A TIME'; return; }
     this.lastChatAt = now;
