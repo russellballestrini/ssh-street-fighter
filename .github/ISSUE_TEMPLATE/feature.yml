@@ -1,0 +1,17 @@
+name: Feature idea
+description: Propose a fighter, move, arena, renderer, social, or accessibility improvement
+title: "[Idea]: "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: The idea
+      description: What should change, and what would it feel like for a player?
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: What would prove it works?
+      description: Mention mechanics, visual states, terminal sizes, or tests that matter.

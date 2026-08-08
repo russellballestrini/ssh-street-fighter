@@ -1,0 +1,33 @@
+{
+  "name": "ssh-street-fighter",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "A Street Fighter-style versus fighter played entirely over SSH, rendered with truecolor Unicode octant pixels.",
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "start": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "test:engine": "tsx src/engine-test.ts",
+    "test:assets": "tsx src/assets-test.ts",
+    "test:db": "tsx src/db-test.ts",
+    "test:render": "tsx src/tools/diff-verify.ts",
+    "test": "pnpm typecheck && pnpm test:engine && pnpm test:assets && pnpm test:db && pnpm test:render",
+    "test:e2e": "tsx src/social-test.ts && tsx src/ssh-test.ts && tsx src/practice-test.ts",
+    "render-test": "tsx src/render-test.ts",
+    "keygen": "ssh-keygen -t ed25519 -f keys/host.key -N \"\""
+  },
+  "dependencies": {
+    "better-sqlite3": "^13.0.3",
+    "openai": "^7.4.0",
+    "sharp": "^0.35.3",
+    "ssh2": "^1.16.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^9.6.0",
+    "@types/node": "^22.10.0",
+    "@types/ssh2": "^1.15.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  }
+}

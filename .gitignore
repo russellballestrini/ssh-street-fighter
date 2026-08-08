@@ -1,0 +1,15 @@
+node_modules/
+dist/
+keys/
+*.log
+data/
+.env
+.env.*
+!.env.example
+assets/sprites/*/raw/*
+!assets/sprites/*/raw/idle_1.png
+assets/sprites/*/archive*/
+assets/stages/raw/
+.sprite-backups/
+web/.next/
+web/node_modules/

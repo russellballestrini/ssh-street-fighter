@@ -1,0 +1,18 @@
+# Security policy
+
+## Supported version
+
+Security fixes target the current `master` branch and the live server.
+
+## Reporting a vulnerability
+
+Please do not open a public issue for authentication bypasses, command execution, secret exposure, denial-of-service, or another exploitable flaw. Use [GitHub private vulnerability reporting](https://github.com/thomasdavis/ssh-street-fighter/security/advisories/new).
+
+Include reproduction steps, impact, and any suggested mitigation. You should receive an acknowledgement within 72 hours.
+
+## Operator notes
+
+- The game accepts password authentication only as a marker for an unverified guest. It does not validate or store the supplied password.
+- Persistent identity comes from a verified SSH public-key fingerprint.
+- Host keys, SQLite databases, Discord webhooks, gallery admin tokens, and model API keys are ignored and must be supplied outside Git.
+- Discord delivery is optional and best-effort. Never include credentials, key material, or raw fingerprints in event fields.
