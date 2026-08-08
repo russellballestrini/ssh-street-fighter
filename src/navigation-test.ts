@@ -1,14 +1,18 @@
 // Regression for SSH terminals that submit Enter as CRLF: confirming a handle
 // must stop at the main menu, never bleed through into the lounge. Also proves
 // both advertised lounge exits over a real SSH session.
-process.env.SF_DB = '/tmp/sf-navigation-test.db';
+const externalPort = parseInt(process.env.SF_TEST_PORT ?? '0', 10);
+if (!externalPort) process.env.SF_DB = '/tmp/sf-navigation-test.db';
 import ssh2 from 'ssh2';
 import { unlinkSync } from 'fs';
 
-try { unlinkSync(process.env.SF_DB); } catch { /* fresh */ }
-const PORT = 22996;
-const { startServer } = await import('./net/ssh-server.js');
-const server = startServer(PORT, '127.0.0.1', 'keys/host.key');
+if (!externalPort) try { unlinkSync(process.env.SF_DB!); } catch { /* fresh */ }
+const PORT = externalPort || 22996;
+let server: import('ssh2').Server | null = null;
+if (!externalPort) {
+  const { startServer } = await import('./net/ssh-server.js');
+  server = startServer(PORT, '127.0.0.1', 'keys/host.key');
+}
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const waitFor = async (check: () => boolean, timeout = 4000): Promise<boolean> => {
   const deadline = Date.now() + timeout;
@@ -29,7 +33,8 @@ const stream = await new Promise<any>((resolve, reject) => {
 });
 
 await sleep(200);
-stream.write('NAVTEST\r\n');
+const handle = externalPort ? `NAV${Date.now().toString().slice(-6)}` : 'NAVTEST';
+stream.write(`${handle}\r\n`);
 const mainMenuAfterCrlf = await waitFor(() => transcript.includes('MAIN MENU'));
 await sleep(180);
 const didNotEnterLounge = !transcript.includes('/MENU ALSO EXITS');
@@ -55,6 +60,6 @@ const checks = { mainMenuAfterCrlf, didNotEnterLounge, loungeOpened, exitIsVisib
 for (const [name, passed] of Object.entries(checks)) console.log(`${passed ? 'PASS' : 'FAIL'}  ${name}`);
 const ok = Object.values(checks).every(Boolean);
 console.log(ok ? 'NAVIGATION TEST: PASS' : 'NAVIGATION TEST: FAIL');
-await new Promise<void>((resolve) => server.close(() => resolve()));
+if (server) await new Promise<void>((resolve) => server!.close(() => resolve()));
 await sleep(100);
 process.exit(ok ? 0 : 1);
