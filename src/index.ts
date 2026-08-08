@@ -3,6 +3,7 @@ import { execFileSync } from 'child_process';
 import { dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
 import { startServer } from './net/ssh-server.js';
+import { flushTelemetry, track } from './telemetry/discord.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '..');
@@ -19,4 +20,12 @@ function ensureHostKey(): void {
 }
 
 ensureHostKey();
-startServer(PORT, HOST, HOST_KEY);
+const server = startServer(PORT, HOST, HOST_KEY);
+let stopping = false;
+for (const signal of ['SIGTERM', 'SIGINT'] as const) process.once(signal, () => {
+  if (stopping) return;
+  stopping = true;
+  server.close();
+  track('service_stopping', { signal, pid: process.pid });
+  void flushTelemetry(2000).finally(() => process.exit(0));
+});

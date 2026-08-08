@@ -1,0 +1,18 @@
+[Unit]
+Description=SSH Street Fighter — terminal versus fighting game over SSH
+After=network.target
+
+[Service]
+Type=simple
+User=ajax
+WorkingDirectory=/mnt/donto-data/workspace/streetfighter
+EnvironmentFile=-/etc/donto/streetfighter-game.env
+Environment=SF_PORT=2223
+Environment=SF_HOST=0.0.0.0
+Environment=PATH=/usr/bin:/bin
+ExecStart=/usr/bin/node /mnt/donto-data/workspace/streetfighter/node_modules/tsx/dist/cli.mjs src/index.ts
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

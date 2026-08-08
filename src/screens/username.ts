@@ -31,6 +31,7 @@ export const username = {
       if (db.usernameTaken(name)) { s.errorMsg = 'NAME ALREADY TAKEN'; return; }
       if (!s.guest && s.fp) { if (!db.setUsername(s.fp, name)) { s.errorMsg = 'NAME ALREADY TAKEN'; return; } s.player = db.getByFingerprint(s.fp)!; }
       s.username = name;
+      s.trackEvent('handle_chosen', { handle: name, persisted: !s.guest });
       s.goTo('menu');
     }
   },

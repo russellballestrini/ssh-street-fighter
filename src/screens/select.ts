@@ -48,6 +48,7 @@ export const select = {
     else if (k.t === 'esc' || (k.t === 'char' && k.ch.toLowerCase() === 'q')) s.goTo('menu');
     else if (k.t === 'enter' || (k.t === 'char' && (k.ch === 'j' || k.ch === ' '))) {
       if (!s.guest && s.fp) db.setMainChar(s.fp, s.cursor);
+      s.trackEvent('fighter_selected', { fighter: characterAt(s.cursor).name, mode: s.selectMode });
       if (s.selectMode === 'practice') s.startPractice(s.cursor);
       else s.joinLobby();
     }

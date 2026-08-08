@@ -7,9 +7,11 @@ import { composeScene } from '../game/scene.js';
 import { makeFighter, makeMatch, stepMatch, TICK_HZ } from '../game/engine.js';
 import { emptyInputs, type Match } from '../game/types.js';
 import { characterAt } from '../game/roster.js';
+import { specialMovesFor } from '../game/moves.js';
 import * as db from '../db/db.js';
 import { SCREENS, type ScreenName } from '../screens/index.js';
 import { drawFightHud } from '../screens/fight-hud.js';
+import { actorRef, eventId, track, type TelemetryFields } from '../telemetry/discord.js';
 
 const MAX_RENDER_HZ = 15; // visual refresh rate (sim/input stay at TICK_HZ = 30)
 const MAX_COLS = 300, MAX_ROWS = 120;
@@ -18,6 +20,7 @@ const WRAP = '\x1b[?7h';
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 const COLOR_STEP = clamp(parseInt(process.env.SF_COLOR_STEP ?? '1', 10) || 1, 1, 64);
 const INDEXED_COLOR = process.env.SF_COLOR_MODE === '256';
+const MATCH_IDS = new WeakMap<Match, string>();
 
 export interface MatchResult {
   winner: string;
@@ -59,6 +62,9 @@ export class Session {
   incomingChallenge: Session | null = null;
   outgoingChallenge: Session | null = null;
   private lastChatAt = 0;
+  private startedAt = Date.now();
+  private lastAttackA = 'none';
+  private lastAttackB = 'none';
 
   // fight
   match: Match | null = null;
@@ -68,7 +74,14 @@ export class Session {
   practice = false;
   fightInput = new InputState();
 
-  constructor(public username: string, public stream: Duplex, fp: string | null) {
+  constructor(
+    public username: string,
+    public stream: Duplex,
+    fp: string | null,
+    public connectionId = eventId('session'),
+    public remoteIp = 'unknown',
+    public clientSoftware = 'unknown',
+  ) {
     this.fp = fp;
     this.guest = !fp;
     if (fp) {
@@ -82,7 +95,17 @@ export class Session {
 
   get displayName(): string { return this.player?.username ?? this.username; }
 
+  trackEvent(event: string, fields: TelemetryFields = {}): void {
+    track(event, {
+      session_id: this.connectionId,
+      player: this.displayName,
+      actor: actorRef(this.fp, this.connectionId),
+      ...fields,
+    });
+  }
+
   start(): void {
+    this.trackEvent('game_session_started', { identity: this.guest ? 'guest' : 'verified_key', client: this.clientSoftware });
     this.write(HIDE_CURSOR + NOWRAP + CLEAR_SCREEN);
     this.stream.on('data', (d: Buffer) => this.onData(d));
     this.stream.on('close', () => this.close());
@@ -110,6 +133,7 @@ export class Session {
   }
 
   goTo(screen: ScreenName): void {
+    const previous = this.screen;
     if (this.screen === 'lounge' && screen !== 'lounge') SOCIAL.leave(this);
     this.screen = screen;
     this.menuIndex = 0;
@@ -117,6 +141,7 @@ export class Session {
     this.prevFrame = null;
     this.write(CLEAR_SCREEN);
     if (screen === 'leaderboard') this.leader = db.leaderboard(10);
+    if (previous !== screen) this.trackEvent('screen_view', { from: previous, to: screen });
   }
 
   // ---------- input ----------
@@ -128,6 +153,7 @@ export class Session {
     // while typing a username (where 'v' is a normal character).
     if (this.screen !== 'username' && this.screen !== 'lounge' && /[vV]/.test(data.toString('latin1'))) {
       this.renderMode = this.renderMode === 'octant' ? 'half' : 'octant';
+      this.trackEvent('renderer_changed', { mode: this.renderMode });
       this.prevFrame = null;
       data = Buffer.from(data.toString('latin1').replace(/[vV]/g, ''), 'latin1');
       if (data.length === 0) return;
@@ -136,13 +162,13 @@ export class Session {
       // Fight controls use their own hold/motion parser, so handle the overlay
       // key here before forwarding bytes. Any key closes help without also
       // becoming an accidental punch, kick, movement, or quit input.
-      if (data.toString('latin1').includes('?')) { this.helpOpen = true; this.prevFrame = null; return; }
+      if (data.toString('latin1').includes('?')) { this.helpOpen = true; this.prevFrame = null; this.trackEvent('move_help_opened', { fighter: this.ownFighterName() }); return; }
       this.fightInput.feed(data);
       return;
     }
     for (const key of parseKeys(data)) {
       if (this.helpOpen) { this.helpOpen = false; this.prevFrame = null; continue; }
-      if (key.t === 'help') { this.helpOpen = true; this.prevFrame = null; continue; }
+      if (key.t === 'help') { this.helpOpen = true; this.prevFrame = null; this.trackEvent('help_opened', { screen: this.screen }); continue; }
       if (key.t === 'quit') { this.close(); return; }
       SCREENS[this.screen].onKey(this, key);
     }
@@ -156,6 +182,7 @@ export class Session {
       if (this.practice) this.stepPractice();
       else if (this.isStepper && this.match && this.peer && this.peer.alive) {
         stepMatch(this.match, this.fightInput.snapshot(), this.peer.fightInput.snapshot());
+        this.trackSpecialAttacks();
         if (this.fightInput.quit) return this.forfeit(this);
         if (this.peer.fightInput.quit) return this.forfeit(this.peer);
         this.checkVersusEnd();
@@ -202,6 +229,7 @@ export class Session {
   startVersus(match: Match, role: 'a' | 'b', peer: Session, isStepper: boolean): void {
     this.match = match; this.role = role; this.peer = peer; this.isStepper = isStepper;
     this.practice = false; this.fightInput = new InputState();
+    this.lastAttackA = 'none'; this.lastAttackB = 'none';
     this.screen = 'fight'; this.prevFrame = null;
     this.write(CLEAR_SCREEN + HIDE_CURSOR + NOWRAP);
   }
@@ -215,6 +243,9 @@ export class Session {
     m.phase = 'fight'; m.phaseTimer = 0; m.message = '';
     this.match = m; this.role = 'a'; this.peer = null; this.isStepper = true;
     this.practice = true; this.fightInput = new InputState();
+    this.lastAttackA = 'none'; this.lastAttackB = 'none';
+    MATCH_IDS.set(m, eventId('practice'));
+    this.trackEvent('practice_started', { fighter: you.name, dummy: dummy.name, stage: m.stage, match_id: MATCH_IDS.get(m) });
     this.screen = 'fight'; this.prevFrame = null;
     this.write(CLEAR_SCREEN + HIDE_CURSOR + NOWRAP);
   }
@@ -222,6 +253,7 @@ export class Session {
   private stepPractice(): void {
     const m = this.match!;
     stepMatch(m, this.fightInput.snapshot(), emptyInputs());
+    this.trackSpecialAttacks();
     if (this.fightInput.quit) { this.goTo('menu'); return; }
     // endless sandbox: player invincible, dummy respawns, no rounds/timer
     m.phase = 'fight'; m.phaseTimer = 0; m.message = ''; m.roundTime = 99;
@@ -238,6 +270,12 @@ export class Session {
     const winSess = aWon ? this : this.peer!;    // this is role 'a' stepper
     const loseSess = aWon ? this.peer! : this;
     const rating = db.recordMatch(winSess.fp, loseSess.fp, winSess.displayName, loseSess.displayName, winner.name, loser.name, winner.wins);
+    track('match_won', {
+      match_id: MATCH_IDS.get(m), winner: winSess.displayName, loser: loseSess.displayName,
+      winner_actor: actorRef(winSess.fp, winSess.connectionId), loser_actor: actorRef(loseSess.fp, loseSess.connectionId),
+      winner_fighter: winner.name, loser_fighter: loser.name, stage: m.stage, rated: !!rating,
+      winner_elo: rating?.winnerAfter, loser_elo: rating?.loserAfter, rating_delta: rating?.delta,
+    });
     if (winSess.fp) winSess.player = db.getByFingerprint(winSess.fp) ?? winSess.player;
     if (loseSess.fp) loseSess.player = db.getByFingerprint(loseSess.fp) ?? loseSess.player;
     for (const [sess, won] of [[winSess, true], [loseSess, false]] as const) {
@@ -255,6 +293,10 @@ export class Session {
     const other = quitter === this ? this.peer! : this;
     if (other && other.alive && !this.practice) {
       const rating = db.recordMatch(other.fp, quitter.fp, other.displayName, quitter.displayName, 'n/a', 'n/a', 2);
+      track('match_forfeit', {
+        match_id: this.match ? MATCH_IDS.get(this.match) : undefined, winner: other.displayName, quitter: quitter.displayName,
+        reason: 'quit', rated: !!rating, rating_delta: rating?.delta,
+      });
       if (other.fp) other.player = db.getByFingerprint(other.fp) ?? other.player;
       other.result = {
         winner: other.displayName, loser: quitter.displayName, youWon: true, winnerChar: 'n/a',
@@ -268,12 +310,13 @@ export class Session {
 
   private leaveFight(): void { this.match = null; this.peer = null; this.isStepper = false; this.goTo('menu'); }
 
-  joinLobby(): void { ARENA.enqueue(this); }
-  cancelLobby(): void { ARENA.remove(this); this.goTo('menu'); }
+  joinLobby(): void { this.trackEvent('quick_match_queued', { fighter: characterAt(this.cursor).name }); ARENA.enqueue(this); }
+  cancelLobby(): void { ARENA.remove(this); this.trackEvent('quick_match_cancelled'); this.goTo('menu'); }
 
   enterLounge(): void {
     this.goTo('lounge');
     SOCIAL.enter(this);
+    this.trackEvent('lounge_joined', { fighter: characterAt(this.cursor).name });
   }
   loungePlayers(): Session[] { return SOCIAL.online(this); }
   loungeMessages(): readonly db.ChatMessage[] { return SOCIAL.history(); }
@@ -298,6 +341,7 @@ export class Session {
   close(): void {
     if (!this.alive) return;
     this.alive = false;
+    this.trackEvent('game_session_ended', { screen: this.screen, duration_seconds: Math.round((Date.now() - this.startedAt) / 1000) });
     if (this.loopTimer) { clearInterval(this.loopTimer); this.loopTimer = null; }
     ARENA.remove(this);
     SOCIAL.leave(this);
@@ -305,6 +349,10 @@ export class Session {
     if (this.screen === 'fight' && !this.practice && this.peer && this.peer.alive) {
       const other = this.peer;
       const rating = db.recordMatch(other.fp, this.fp, other.displayName, this.displayName, 'n/a', 'n/a', 2);
+      track('match_forfeit', {
+        match_id: this.match ? MATCH_IDS.get(this.match) : undefined, winner: other.displayName, quitter: this.displayName,
+        reason: 'disconnect', rated: !!rating, rating_delta: rating?.delta,
+      });
       if (other.fp) other.player = db.getByFingerprint(other.fp) ?? other.player;
       other.result = {
         winner: other.displayName, loser: this.displayName, youWon: true, winnerChar: 'n/a',
@@ -315,6 +363,33 @@ export class Session {
     }
     try { this.stream.write(SHOW_CURSOR + WRAP + RESET + '\r\n'); this.stream.end(); } catch { /* ignore */ }
   }
+
+  private ownFighterName(): string {
+    if (!this.match) return characterAt(this.cursor).name;
+    return this.role === 'a' ? this.match.a.name : this.match.b.name;
+  }
+
+  private trackSpecialAttacks(): void {
+    const m = this.match;
+    if (!m) return;
+    const inspect = (side: 'a' | 'b', previous: string): string => {
+      const fighter = m[side];
+      const current = fighter.attack;
+      if (current !== previous && current !== 'none') {
+        const move = specialMovesFor(fighter.name).find((candidate) => candidate.attack === current);
+        if (move && (!this.practice || side === 'a')) {
+          const owner = side === 'a' ? this : this.peer;
+          track('special_move_used', {
+            match_id: MATCH_IDS.get(m), player: owner?.displayName ?? 'training_dummy', fighter: fighter.name,
+            move: move.name, attack: move.attack, practice: this.practice,
+          });
+        }
+      }
+      return current;
+    };
+    this.lastAttackA = inspect('a', this.lastAttackA);
+    this.lastAttackB = inspect('b', this.lastAttackB);
+  }
 }
 
 // ---------- matchmaking ----------
@@ -324,19 +399,27 @@ class Arena {
   enqueue(s: Session): void {
     if (this.waiting && this.waiting.alive && this.waiting !== s) {
       const a = this.waiting; this.waiting = null;
-      this.pair(a, s);
+      this.pair(a, s, 'quick_match');
     } else {
       this.waiting = s;
       s.goTo('lobbyWait');
     }
   }
 
-  pair(a: Session, b: Session): void {
+  pair(a: Session, b: Session, source: 'quick_match' | 'direct_challenge' = 'quick_match'): void {
     const ca = characterAt(a.cursor);
     const cb = characterAt(b.cursor);
     const fa = makeFighter('a', ca.name, 'a', ca.palette);
     const fb = makeFighter('b', cb.name, 'b', cb.palette);
     const match = makeMatch(fa, fb);
+    const matchId = eventId('match');
+    MATCH_IDS.set(match, matchId);
+    track('match_started', {
+      match_id: matchId, source, stage: match.stage,
+      player_a: a.displayName, actor_a: actorRef(a.fp, a.connectionId), fighter_a: ca.name, elo_a: a.player?.elo,
+      player_b: b.displayName, actor_b: actorRef(b.fp, b.connectionId), fighter_b: cb.name, elo_b: b.player?.elo,
+      rated: !!(a.fp && b.fp && a.fp !== b.fp),
+    });
     a.startVersus(match, 'a', b, true);
     b.startVersus(match, 'b', a, false);
   }
@@ -363,6 +446,7 @@ class SocialHub {
     s.incomingChallenge = null; s.outgoingChallenge = null;
     if (incoming?.outgoingChallenge === s) { incoming.outgoingChallenge = null; incoming.loungeNotice = `${s.displayName} LEFT THE LOUNGE`; }
     if (outgoing?.incomingChallenge === s) { outgoing.incomingChallenge = null; outgoing.loungeNotice = `${s.displayName} CANCELLED THE CHALLENGE`; }
+    s.trackEvent('lounge_left');
     this.touch();
   }
 
@@ -383,6 +467,7 @@ class SocialHub {
     list.push(message);
     this.messages = list.slice(-100);
     s.loungeNotice = 'MESSAGE SENT';
+    s.trackEvent('chat_message', { message: text });
     this.touch();
   }
 
@@ -395,6 +480,10 @@ class SocialHub {
     from.loungeNotice = `CHALLENGE SENT TO ${to.displayName}`;
     to.loungeNotice = `${from.displayName} CHALLENGED YOU`;
     from.prevFrame = null; to.prevFrame = null;
+    track('challenge_sent', {
+      challenger: from.displayName, challenger_actor: actorRef(from.fp, from.connectionId), fighter: characterAt(from.cursor).name,
+      challenged: to.displayName, challenged_actor: actorRef(to.fp, to.connectionId), opponent_fighter: characterAt(to.cursor).name,
+    });
   }
 
   accept(to: Session): void {
@@ -404,8 +493,9 @@ class SocialHub {
     }
     from.outgoingChallenge = null; to.incomingChallenge = null;
     this.members.delete(from); this.members.delete(to);
+    track('challenge_accepted', { challenger: from.displayName, challenged: to.displayName });
     this.touch();
-    ARENA.pair(from, to);
+    ARENA.pair(from, to, 'direct_challenge');
   }
 
   decline(to: Session): void {
@@ -416,6 +506,7 @@ class SocialHub {
     to.loungeNotice = `DECLINED ${from.displayName}`;
     from.loungeNotice = `${to.displayName} DECLINED YOUR CHALLENGE`;
     from.prevFrame = null; to.prevFrame = null;
+    track('challenge_declined', { challenger: from.displayName, challenged: to.displayName });
   }
 
   private touch(): void { for (const s of this.members) s.prevFrame = null; }
