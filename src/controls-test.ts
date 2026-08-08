@@ -42,6 +42,9 @@ await sleep(100);
 const duplicateStart = transcript.length;
 stream.write('e');
 const duplicateRejected = await waitFor(() => transcript.slice(duplicateStart).includes('ALREADY USED BY KICK'));
+const reservedStart = transcript.length;
+stream.write('q');
+const reservedRejected = await waitFor(() => transcript.slice(reservedStart).includes('Q IS RESERVED FOR LEAVING A FIGHT'));
 const assignedStart = transcript.length;
 stream.write('j');
 const punchAssigned = await waitFor(() => transcript.slice(assignedStart).includes('PUNCH SET TO J'));
@@ -63,7 +66,7 @@ const moveCardUsesCustomKey = await waitFor(() => {
 });
 
 conn.end();
-const checks = { menuReady, controlsOpened, duplicateRejected, punchAssigned, returnedToMenu, practiceStarted, moveCardUsesCustomKey };
+const checks = { menuReady, controlsOpened, duplicateRejected, reservedRejected, punchAssigned, returnedToMenu, practiceStarted, moveCardUsesCustomKey };
 for (const [name, ok] of Object.entries(checks)) console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}`);
 const ok = Object.values(checks).every(Boolean);
 console.log(ok ? 'CONTROLS TEST: PASS' : 'CONTROLS TEST: FAIL');
