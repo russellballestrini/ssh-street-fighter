@@ -7,6 +7,7 @@ import type { Match } from '../game/types.js';
 import { healthBar, keyHints } from '../ui/tui.js';
 import { THEME } from '../ui/theme.js';
 import { rgb } from '../render/pixel.js';
+import { DEFAULT_BINDINGS, keyLabel, type KeyBindings } from '../input/bindings.js';
 
 const P1 = rgb(100, 232, 250);
 const P2 = rgb(255, 126, 194);
@@ -51,18 +52,19 @@ function drawAnnouncement(f: Frame, message: string): void {
   f.write(x + Math.max(0, Math.floor((width - shown.length) / 2)), y, shown, THEME.accent, THEME.shadow, true);
 }
 
-function controls(cols: number, practice: boolean): [string, string][] {
+function controls(cols: number, practice: boolean, b: Readonly<KeyBindings>): [string, string][] {
   const quit = practice ? 'EXIT' : 'QUIT';
-  if (cols >= 96) return [['←→', 'MOVE'], ['↑', 'JUMP'], ['↓', 'CROUCH'], ['W', 'PUNCH'], ['E', 'KICK'], ['BACK', 'BLOCK'], ['?', 'MOVES'], ['V', 'GFX'], ['Q', quit]];
-  if (cols >= 68) return [['←→', 'MOVE'], ['↑', 'JUMP'], ['W', 'PUNCH'], ['E', 'KICK'], ['?', 'MOVES'], ['Q', quit]];
-  if (cols >= 44) return [['←→', 'MOVE'], ['W', 'HIT'], ['E', 'KICK'], ['?', 'MOVES'], ['Q', quit]];
-  if (cols >= 34) return [['W', 'HIT'], ['E', 'KICK'], ['?', 'MOVES'], ['Q', quit]];
+  const punch = keyLabel(b.punch), kick = keyLabel(b.kick);
+  if (cols >= 96) return [['←→', 'MOVE'], ['↑', 'JUMP'], ['↓', 'CROUCH'], [punch, 'PUNCH'], [kick, 'KICK'], ['BACK', 'BLOCK'], ['?', 'MOVES'], ['V', 'GFX'], ['Q', quit]];
+  if (cols >= 68) return [['←→', 'MOVE'], ['↑', 'JUMP'], [punch, 'PUNCH'], [kick, 'KICK'], ['?', 'MOVES'], ['Q', quit]];
+  if (cols >= 44) return [['←→', 'MOVE'], [punch, 'HIT'], [kick, 'KICK'], ['?', 'MOVES'], ['Q', quit]];
+  if (cols >= 34) return [[punch, 'HIT'], [kick, 'KICK'], ['?', 'MOVES'], ['Q', quit]];
   return [['?', 'MOVES'], ['Q', quit]];
 }
 
-export function drawFightHud(f: Frame, m: Match, practice: boolean): void {
+export function drawFightHud(f: Frame, m: Match, practice: boolean, bindings: Readonly<KeyBindings> = DEFAULT_BINDINGS): void {
   drawStatus(f, m, practice);
   drawAnnouncement(f, m.message);
   f.fill(0, f.rows - 1, f.cols, 1, THEME.shadow);
-  keyHints(f, f.rows - 1, controls(f.cols, practice));
+  keyHints(f, f.rows - 1, controls(f.cols, practice, bindings));
 }

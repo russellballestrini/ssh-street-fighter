@@ -3,6 +3,7 @@ import { HIDE_CURSOR, SHOW_CURSOR, CLEAR_SCREEN, RESET } from '../render/pixel.j
 import { Frame, diffCells, type RenderMode, type Cell } from '../render/frame.js';
 import { parseKeys, type Key } from '../ui/key.js';
 import { InputState } from '../input/keys.js';
+import { parseBindings, serializeBindings, type KeyBindings } from '../input/bindings.js';
 import { composeScene } from '../game/scene.js';
 import { makeFighter, makeMatch, stepMatch, TICK_HZ } from '../game/engine.js';
 import { emptyInputs, type Match } from '../game/types.js';
@@ -60,6 +61,8 @@ export class Session {
   loungeCursor = 0;
   chatBuf = '';
   loungeNotice = '';
+  bindings: KeyBindings = parseBindings(null);
+  controlsCapture = false;   // controls screen: next keypress rebinds the selected action
   incomingChallenge: Session | null = null;
   outgoingChallenge: Session | null = null;
   private lastChatAt = 0;
@@ -92,6 +95,15 @@ export class Session {
     } else {
       this.screen = 'username'; // guests still pick a display name (not persisted)
     }
+    this.bindings = parseBindings(this.player?.key_bindings);
+    this.fightInput = new InputState(this.bindings);
+  }
+
+  /** Apply new fight bindings; verified players keep them across connections. */
+  setBindings(next: KeyBindings): void {
+    this.bindings = next;
+    if (this.fp) db.setKeyBindings(this.fp, serializeBindings(next));
+    this.trackEvent('controls_updated', { punch: next.punch, kick: next.kick, jump: next.jump, persisted: !!this.fp });
   }
 
   get displayName(): string { return this.player?.username ?? this.username; }
@@ -139,6 +151,7 @@ export class Session {
     this.screen = screen;
     this.menuIndex = 0;
     this.errorMsg = '';
+    this.controlsCapture = false;
     this.prevFrame = null;
     if (previous !== screen) this.screenInputGuardUntil = Date.now() + 120;
     this.write(CLEAR_SCREEN);
@@ -156,7 +169,7 @@ export class Session {
     let data = d;
     // 'v' toggles the pixel renderer (octant <-> half-block) everywhere except
     // while typing a username (where 'v' is a normal character).
-    if (this.screen !== 'username' && this.screen !== 'lounge' && /[vV]/.test(data.toString('latin1'))) {
+    if (this.screen !== 'username' && this.screen !== 'lounge' && this.screen !== 'controls' && /[vV]/.test(data.toString('latin1'))) {
       this.renderMode = this.renderMode === 'octant' ? 'half' : 'octant';
       this.trackEvent('renderer_changed', { mode: this.renderMode });
       this.prevFrame = null;
@@ -221,7 +234,7 @@ export class Session {
       // is a separate text-cell overlay, so font zoom never scales it below one
       // readable terminal glyph per character.
       f.usePixel(composeScene(this.match, false, cols * 2, rows * 4, this.practice));
-      drawFightHud(f, this.match, this.practice);
+      drawFightHud(f, this.match, this.practice, this.bindings);
     } else {
       SCREENS[this.screen].render(this, f);
     }
@@ -235,7 +248,7 @@ export class Session {
   // ---------- fight orchestration ----------
   startVersus(match: Match, role: 'a' | 'b', peer: Session, isStepper: boolean): void {
     this.match = match; this.role = role; this.peer = peer; this.isStepper = isStepper;
-    this.practice = false; this.fightInput = new InputState();
+    this.practice = false; this.fightInput = new InputState(this.bindings);
     this.lastAttackA = 'none'; this.lastAttackB = 'none';
     this.screen = 'fight'; this.prevFrame = null;
     this.write(CLEAR_SCREEN + HIDE_CURSOR + NOWRAP);
@@ -249,7 +262,7 @@ export class Session {
     const m = makeMatch(fa, fb);
     m.phase = 'fight'; m.phaseTimer = 0; m.message = '';
     this.match = m; this.role = 'a'; this.peer = null; this.isStepper = true;
-    this.practice = true; this.fightInput = new InputState();
+    this.practice = true; this.fightInput = new InputState(this.bindings);
     this.lastAttackA = 'none'; this.lastAttackB = 'none';
     MATCH_IDS.set(m, eventId('practice'));
     this.trackEvent('practice_started', { fighter: you.name, dummy: dummy.name, stage: m.stage, match_id: MATCH_IDS.get(m) });

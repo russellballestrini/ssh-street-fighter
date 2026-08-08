@@ -20,6 +20,7 @@ export interface Player {
   rounds_won: number;
   elo: number;
   peak_elo: number;
+  key_bindings: string | null;
   created_at: number;
   last_seen: number;
 }
@@ -110,6 +111,7 @@ export function initDb(): void {
   ensureColumn('match_history', 'winner_elo_after', 'winner_elo_after INTEGER');
   ensureColumn('match_history', 'loser_elo_before', 'loser_elo_before INTEGER');
   ensureColumn('match_history', 'loser_elo_after', 'loser_elo_after INTEGER');
+  ensureColumn('players', 'key_bindings', 'key_bindings TEXT');
 }
 
 export function getByFingerprint(fp: string): Player | undefined {
@@ -142,6 +144,10 @@ export function setUsername(fp: string, name: string): boolean {
 
 export function setMainChar(fp: string, idx: number): void {
   db.prepare('UPDATE players SET main_char = ? WHERE fingerprint = ?').run(idx, fp);
+}
+
+export function setKeyBindings(fp: string, bindingsJson: string): void {
+  db.prepare('UPDATE players SET key_bindings = ? WHERE fingerprint = ?').run(bindingsJson, fp);
 }
 
 /**

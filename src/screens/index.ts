@@ -9,8 +9,9 @@ import { leaderboard } from './leaderboard.js';
 import { results } from './results.js';
 import { helpOverlay } from './help.js';
 import { lounge } from './lounge.js';
+import { controls } from './controls.js';
 
-export type ScreenName = 'username' | 'menu' | 'select' | 'lobbyWait' | 'lounge' | 'leaderboard' | 'results' | 'fight';
+export type ScreenName = 'username' | 'menu' | 'select' | 'lobbyWait' | 'lounge' | 'leaderboard' | 'results' | 'fight' | 'controls';
 
 export interface Screen {
   render(s: Session, f: Frame): void;
@@ -22,5 +23,5 @@ export interface Screen {
 const fightStub: Screen = { render: () => {}, onKey: () => {} };
 
 export const SCREENS: Record<ScreenName, Screen> & { help: { render(s: Session, f: Frame): void } } = {
-  username, menu, select, lobbyWait, lounge, leaderboard, results, fight: fightStub, help: helpOverlay,
+  username, menu, select, lobbyWait, lounge, leaderboard, results, controls, fight: fightStub, help: helpOverlay,
 };

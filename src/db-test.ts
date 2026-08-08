@@ -30,6 +30,10 @@ const board = db.leaderboard(10);
 assert(board[0]?.username === 'ALPHA' && board[0]?.elo === 1231, 'leaderboard is ordered by ELO');
 assert(db.playerRank('fp:a') === 1 && db.playerRank('fp:b') === 2, 'player rank follows ELO order');
 
+assert(db.getByFingerprint('fp:a')?.key_bindings === null, 'players start with no custom bindings');
+db.setKeyBindings('fp:a', '{"punch":"j","kick":"k","jump":" "}');
+assert(db.getByFingerprint('fp:a')?.key_bindings === '{"punch":"j","kick":"k","jump":" "}', 'key bindings persist per fingerprint');
+
 db.recordEvent('match_started', '{"player_a":"ALPHA"}');
 db.recordEvent('special_move_used', '{"move":"HADOUKEN"}');
 const events = db.recentEvents(10);

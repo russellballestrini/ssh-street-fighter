@@ -3,15 +3,18 @@
 // Terminals send only key-DOWN bytes (auto-repeating while held), so held
 // directions use a short expiry window kept alive by auto-repeat:
 //   Arrows  ← →  move,  ↑ jump (edge),  ↓ crouch (held)
-//   W punch (edge),  E kick (edge)
+//   Punch / kick / jump letter keys are rebindable (defaults W / E / SPACE)
 //   BLOCK is not a key: hold the direction AWAY from your opponent (the engine
 //   derives it from movement vs. facing), exactly like the arcade games.
 import { emptyInputs, type Inputs } from '../game/types.js';
+import { DEFAULT_BINDINGS, type KeyBindings } from './bindings.js';
 
 const HOLD_MS = 240;
 const MOTION_MS = 720; // how long a direction stays in the special-move buffer
 
 export class InputState {
+  constructor(private bindings: Readonly<KeyBindings> = DEFAULT_BINDINGS) {}
+
   private leftUntil = 0;
   private rightUntil = 0;
   private downUntil = 0;
@@ -51,12 +54,11 @@ export class InputState {
         i += 1; // lone ESC / unknown — skip it
         continue;
       }
-      switch (c.toLowerCase()) {
-        case 'w': this.punchEdge = true; break;
-        case 'e': this.kickEdge = true; break;
-        case ' ': this.jumpEdge = true; break;
-        case 'q': case '\x03': this.quit = true; break;
-      }
+      const lower = c.toLowerCase();
+      if (lower === this.bindings.punch) this.punchEdge = true;
+      else if (lower === this.bindings.kick) this.kickEdge = true;
+      else if (lower === this.bindings.jump) this.jumpEdge = true;
+      else if (lower === 'q' || c === '\x03') this.quit = true;
       i++;
     }
   }
