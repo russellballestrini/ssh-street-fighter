@@ -21,6 +21,20 @@ export const DISCORD_EVENTS = new Set([
   'chat_message',
 ]);
 
+// Character picks are competitive information: announcing them before or
+// during a match lets the community scout an opponent. Pick-bearing fields are
+// stripped at this boundary from every outgoing embed; the local analytics
+// sink still records every field.
+const PICK_FIELD = /(^|_)(fighter|char|dummy|move|attack)(_|$)/;
+
+function communityFields(fields: TelemetryFields): TelemetryFields {
+  const shared: TelemetryFields = {};
+  for (const [name, value] of Object.entries(fields)) {
+    if (!PICK_FIELD.test(name)) shared[name] = value;
+  }
+  return shared;
+}
+
 const MAX_QUEUE = 200;
 const SEND_GAP_MS = 450;
 const RETRIES = 2;
@@ -132,7 +146,7 @@ export function track(event: string, fields: TelemetryFields = {}): void {
   catch (error) { console.warn('[analytics] failed to record an event', error); }
   if (!DISCORD_EVENTS.has(normalized) || !webhook()) return;
   if (queue.length >= MAX_QUEUE) { queue.shift(); dropped++; }
-  queue.push({ event: normalized, fields, at, attempts: 0 });
+  queue.push({ event: normalized, fields: communityFields(fields), at, attempts: 0 });
   void pump();
 }
 
